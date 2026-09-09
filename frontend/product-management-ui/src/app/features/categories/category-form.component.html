@@ -1,0 +1,47 @@
+<section class="page-header">
+  <div>
+    <h1>{{ isEdit ? 'Chỉnh sửa danh mục' : 'Thêm danh mục' }}</h1>
+    <p>Các trường có dấu * là bắt buộc.</p>
+  </div>
+  <a class="btn" routerLink="/categories">Quay lại</a>
+</section>
+
+<div *ngIf="errorMessage" class="alert error">{{ errorMessage }}</div>
+<div *ngIf="isEdit && productCount > 0" class="alert info">
+  Danh mục hiện có {{ productCount }} hàng hóa. Ký hiệu mã hàng không thể thay đổi.
+</div>
+<div *ngIf="loading" class="card loading">Đang tải thông tin danh mục...</div>
+
+<form *ngIf="!loading && !loadFailed" class="card form-card" [formGroup]="form" (ngSubmit)="submit()">
+  <div class="form-grid">
+    <div class="field">
+      <label>Mã danh mục *</label>
+      <input formControlName="categoryCode" maxlength="50" placeholder="DM001">
+      <small class="field-error" *ngIf="fieldError('categoryCode')">{{ fieldError('categoryCode') }}</small>
+    </div>
+    <div class="field">
+      <label>Tên danh mục *</label>
+      <input formControlName="categoryName" maxlength="200" placeholder="Hải sản">
+      <small class="field-error" *ngIf="fieldError('categoryName')">{{ fieldError('categoryName') }}</small>
+    </div>
+    <div class="field">
+      <label>Ký hiệu mã hàng *</label>
+      <input formControlName="codePrefix" maxlength="10" placeholder="DU">
+      <small class="field-error" *ngIf="fieldError('codePrefix')">{{ fieldError('codePrefix') }}</small>
+      <small class="muted-help" *ngIf="isEdit && !canEditPrefix">Ký hiệu không thể thay đổi vì danh mục đã có hàng hóa.</small>
+    </div>
+    <div class="field full">
+      <label>Mô tả</label>
+      <textarea rows="4" maxlength="500" formControlName="description" placeholder="Mô tả danh mục"></textarea>
+      <small class="field-error" *ngIf="fieldError('description')">{{ fieldError('description') }}</small>
+    </div>
+    <label class="checkbox full">
+      <input type="checkbox" formControlName="isActive">
+      <span>Danh mục đang hoạt động</span>
+    </label>
+  </div>
+  <div class="form-actions">
+    <a class="btn" routerLink="/categories">Hủy</a>
+    <button class="btn primary" type="submit" [disabled]="saving">{{ saving ? 'Đang lưu...' : 'Lưu' }}</button>
+  </div>
+</form>

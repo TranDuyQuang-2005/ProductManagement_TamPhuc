@@ -1,0 +1,120 @@
+<section class="page-header">
+  <div>
+    <h1>Nhật ký hoạt động</h1>
+    <p>Theo dõi tạo mới, cập nhật, xóa và đăng nhập.</p>
+  </div>
+</section>
+
+<div *ngIf="errorMessage" class="alert error">
+  {{ errorMessage }}
+  <button type="button" class="btn small" (click)="retryLoad()">Thử lại</button>
+</div>
+
+<form class="card filters" [formGroup]="filterForm" (ngSubmit)="search()">
+  <div class="field">
+    <label>Từ ngày</label>
+    <input type="date" formControlName="fromDate">
+  </div>
+  <div class="field">
+    <label>Đến ngày</label>
+    <input type="date" formControlName="toDate">
+  </div>
+  <div class="field">
+    <label>Người dùng</label>
+    <input formControlName="username" placeholder="admin">
+  </div>
+  <div class="field">
+    <label>Hành động</label>
+    <select formControlName="action">
+      <option *ngFor="let item of actions" [value]="item.value">{{ item.label }}</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Đối tượng</label>
+    <select formControlName="entityType">
+      <option *ngFor="let item of entityTypes" [value]="item.value">{{ item.label }}</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Mã đối tượng</label>
+    <input formControlName="entityCode" placeholder="DU000001">
+  </div>
+  <div class="filter-actions">
+    <button type="button" class="btn" (click)="reset()">Đặt lại</button>
+    <button type="submit" class="btn primary">Tìm kiếm</button>
+  </div>
+</form>
+
+<div class="card table-wrap">
+  <div *ngIf="loading" class="loading">Đang tải nhật ký hoạt động...</div>
+  <table *ngIf="!loading">
+    <thead>
+      <tr>
+        <th>Thời gian</th><th>Người thực hiện</th><th>Hành động</th><th>Đối tượng</th><th>Mã</th><th>Chi tiết</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let log of logs">
+        <td>{{ log.createdAt | date:'dd/MM/yyyy HH:mm' }}</td>
+        <td>{{ log.username }}</td>
+        <td><span class="badge audit-action-badge">{{ getActionLabel(log.action) }}</span></td>
+        <td>{{ getEntityLabel(log.entityType) }}</td>
+        <td><strong>{{ log.entityCode || '—' }}</strong></td>
+        <td><button class="btn small" type="button" (click)="openDetail(log)">Xem chi tiết</button></td>
+      </tr>
+      <tr *ngIf="logs.length === 0">
+        <td colspan="6" class="empty">Chưa có nhật ký phù hợp với điều kiện tìm kiếm.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="pagination" *ngIf="!loading">
+    <span>Tổng: <strong>{{ totalItems }}</strong> bản ghi</span>
+    <div>
+      <button class="btn small" [disabled]="page <= 1" (click)="previousPage()">Trước</button>
+      <span>Trang {{ page }} / {{ totalPages || 1 }}</span>
+      <button class="btn small" [disabled]="page >= totalPages || totalPages === 0" (click)="nextPage()">Sau</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" *ngIf="selectedLog as log" (click)="closeDetail()">
+  <section class="card modal audit-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Chi tiết nhật ký</h2>
+      <button class="btn small" type="button" (click)="closeDetail()">Đóng</button>
+    </div>
+
+    <ng-container *ngIf="detailView(log) as detail">
+      <div class="audit-detail-header">
+        <h3>{{ detail.title }}</h3>
+        <span class="badge audit-action-badge">{{ getActionLabel(log.action) }}</span>
+      </div>
+
+      <dl class="detail-grid">
+        <dt>Người thực hiện</dt><dd>{{ log.username }}</dd>
+        <dt>Thời gian</dt><dd>{{ log.createdAt | date:'dd/MM/yyyy HH:mm:ss' }}</dd>
+        <dt>Địa chỉ IP</dt><dd>{{ log.ipAddress || '—' }}</dd>
+        <dt>Đối tượng</dt><dd>{{ getEntityLabel(log.entityType) }}</dd>
+        <dt>{{ getAuditCodeLabel(log.entityType) }}</dt><dd>{{ log.entityCode || '—' }}</dd>
+      </dl>
+
+      <div class="audit-detail-list" *ngIf="detail.items.length > 0; else emptyDetail">
+        <div class="audit-change-row" *ngFor="let item of detail.items">
+          <strong>{{ item.label }}</strong>
+          <span *ngIf="detail.mode === 'changes'; else snapshotValue">
+            <span>{{ item.oldValue }}</span>
+            <span class="change-arrow" aria-hidden="true">→</span>
+            <span>{{ item.newValue }}</span>
+          </span>
+          <ng-template #snapshotValue>
+            <span>{{ item.value }}</span>
+          </ng-template>
+        </div>
+      </div>
+      <ng-template #emptyDetail>
+        <div class="empty compact">Không có chi tiết thay đổi.</div>
+      </ng-template>
+    </ng-container>
+  </section>
+</div>

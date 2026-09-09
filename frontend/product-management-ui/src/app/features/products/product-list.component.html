@@ -1,0 +1,193 @@
+<section class="page-header">
+  <div>
+    <h1>Quản lý hàng hóa</h1>
+    <p>Tìm kiếm, lọc và quản lý dữ liệu hàng hóa.</p>
+  </div>
+  <a class="btn primary" routerLink="/products/new">+ Thêm hàng hóa</a>
+</section>
+
+<div *ngIf="message" class="alert success">{{ message }}</div>
+<div *ngIf="errorMessage" class="alert error">
+  {{ errorMessage }}
+  <button type="button" class="btn small" (click)="retryLoad()">Thử lại</button>
+</div>
+
+<form class="card filters" [formGroup]="filterForm" (ngSubmit)="search()">
+  <div class="field grow">
+    <label>Từ khóa</label>
+    <input formControlName="keyword" placeholder="Ví dụ: DU000001 hoặc thịt bò">
+  </div>
+  <div class="field">
+    <label>Danh mục</label>
+    <select formControlName="categoryId">
+      <option [ngValue]="null">Tất cả</option>
+      <option *ngFor="let item of categories" [ngValue]="item.id">
+        {{ item.categoryName }}{{ item.isActive ? '' : ' (Ngừng hoạt động)' }}
+      </option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Tồn kho</label>
+    <select formControlName="stockStatus">
+      <option value="All">Tất cả</option>
+      <option value="InStock">Còn hàng</option>
+      <option value="OutOfStock">Hết hàng</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Trạng thái</label>
+    <select formControlName="isActive">
+      <option [ngValue]="null">Tất cả</option>
+      <option [ngValue]="true">Đang kinh doanh</option>
+      <option [ngValue]="false">Ngừng kinh doanh</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Giá từ</label>
+    <input type="number" min="0" formControlName="minPrice" placeholder="0">
+  </div>
+  <div class="field">
+    <label>Giá đến</label>
+    <input type="number" min="0" formControlName="maxPrice" placeholder="Không giới hạn">
+  </div>
+  <div class="field">
+    <label>Sắp xếp</label>
+    <select formControlName="sortBy">
+      <option value="createdAt">Ngày tạo</option>
+      <option value="productCode">Mã hàng</option>
+      <option value="productName">Tên hàng</option>
+      <option value="categoryName">Danh mục</option>
+      <option value="price">Giá</option>
+      <option value="quantity">Số lượng</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Chiều</label>
+    <select formControlName="sortDirection">
+      <option value="desc">Giảm dần</option>
+      <option value="asc">Tăng dần</option>
+    </select>
+  </div>
+  <div class="filter-actions">
+    <button type="button" class="btn" (click)="reset()">Đặt lại</button>
+    <button type="submit" class="btn primary">Tìm kiếm</button>
+  </div>
+</form>
+
+<div class="card table-wrap">
+  <div *ngIf="loading" class="loading">Đang tải danh sách hàng hóa...</div>
+  <table *ngIf="!loading">
+    <thead>
+      <tr>
+        <th>Mã hàng</th><th>Tên hàng</th><th>Danh mục</th><th>ĐVT</th>
+        <th class="number">Giá</th><th class="number">Tồn kho</th><th>Trạng thái</th><th>Thao tác</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let product of products">
+        <td><strong>{{ product.productCode }}</strong></td>
+        <td>{{ product.productName }}</td>
+        <td>{{ product.categoryName }}</td>
+        <td>{{ product.unit }}</td>
+        <td class="number">{{ product.price | number:'1.0-2' }} VND</td>
+        <td class="number">{{ product.quantity | number:'1.0-2' }}</td>
+        <td>
+          <span class="badge status-badge" [class.good]="product.isActive" [class.warning]="!product.isActive">
+            {{ product.isActive ? 'Hoạt động' : 'Ngừng hoạt động' }}
+          </span>
+        </td>
+        <td class="actions table-actions">
+          <ng-container *ngIf="canEditProduct(product); else lockedEdit">
+            <a class="btn small action-btn" [routerLink]="['/products', product.id, 'edit']">Sửa</a>
+          </ng-container>
+          <ng-template #lockedEdit>
+            <span class="action-tooltip" [title]="editTitle(product)">
+              <button class="btn small action-btn" type="button" disabled>
+                <span class="lock-icon" aria-hidden="true"></span>
+                Sửa
+              </button>
+            </span>
+          </ng-template>
+          <button class="btn small action-btn" type="button" (click)="openHistory(product)">Lịch sử</button>
+          <span class="action-tooltip" [title]="deleteTitle(product)">
+            <button
+              class="btn small danger action-btn"
+              type="button"
+              [disabled]="!canDeleteProduct(product) || deletingId !== null"
+              (click)="deleteProduct(product)">
+              <span *ngIf="!canDeleteProduct(product)" class="lock-icon" aria-hidden="true"></span>
+              {{ deletingId === product.id ? 'Đang xóa...' : 'Xóa' }}
+            </button>
+          </span>
+        </td>
+      </tr>
+      <tr *ngIf="products.length === 0">
+        <td colspan="8" class="empty">Chưa có hàng hóa phù hợp với điều kiện tìm kiếm.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="pagination" *ngIf="!loading">
+    <span>Tổng: <strong>{{ totalItems }}</strong> bản ghi</span>
+    <div>
+      <button class="btn small" [disabled]="page <= 1" (click)="previousPage()">Trước</button>
+      <span>Trang {{ page }} / {{ totalPages || 1 }}</span>
+      <button class="btn small" [disabled]="page >= totalPages || totalPages === 0" (click)="nextPage()">Sau</button>
+    </div>
+  </div>
+</div>
+
+<app-confirm-dialog
+  [open]="pendingDeleteProduct !== null"
+  title="Xác nhận xóa"
+  message="Bạn có chắc chắn muốn xóa hàng hóa"
+  [target]="pendingDeleteProduct ? '&quot;' + pendingDeleteProduct.productName + '&quot; (' + pendingDeleteProduct.productCode + ')?' : ''"
+  warning="Thao tác này không thể hoàn tác."
+  confirmLabel="Xóa hàng hóa"
+  loadingLabel="Đang xóa..."
+  [loading]="deletingId !== null"
+  (cancel)="cancelDeleteProduct()"
+  (confirm)="confirmDeleteProduct()" />
+
+<div class="modal-backdrop" *ngIf="historyProduct" (click)="closeHistory()">
+  <section class="card modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Lịch sử {{ historyProduct.productCode }} - {{ historyProduct.productName }}</h2>
+      <button class="btn small" type="button" (click)="closeHistory()">Đóng</button>
+    </div>
+    <div *ngIf="historyLoading" class="loading">Đang tải lịch sử hàng hóa...</div>
+    <div *ngIf="!historyLoading && historyLogs.length === 0" class="empty">Chưa có lịch sử.</div>
+    <div class="history-list" *ngIf="!historyLoading">
+      <article class="history-item" *ngFor="let log of historyLogs">
+        <div class="history-meta">
+          <strong>{{ log.createdAt | date:'dd/MM/yyyy HH:mm' }}</strong>
+          <span>{{ log.username }}</span>
+          <span class="badge audit-action-badge">{{ getActionLabel(log.action) }}</span>
+        </div>
+        <ng-container *ngIf="detailView(log) as detail">
+          <div class="history-fields" *ngIf="detail.items.length > 0; else emptyHistoryDetail">
+            <div *ngFor="let item of detail.items">
+              <strong>{{ item.label }}</strong>
+              <span *ngIf="detail.mode === 'changes'; else historySnapshotValue">
+                {{ item.oldValue }} <span class="change-arrow" aria-hidden="true">→</span> {{ item.newValue }}
+              </span>
+              <ng-template #historySnapshotValue>
+                <span>{{ item.value }}</span>
+              </ng-template>
+            </div>
+          </div>
+          <ng-template #emptyHistoryDetail>
+            <div class="muted-help">Không có chi tiết thay đổi.</div>
+          </ng-template>
+        </ng-container>
+      </article>
+    </div>
+    <div class="pagination" *ngIf="!historyLoading">
+      <span>Trang {{ historyPage }} / {{ historyTotalPages || 1 }}</span>
+      <div>
+        <button class="btn small" [disabled]="historyPage <= 1" (click)="previousHistoryPage()">Trước</button>
+        <button class="btn small" [disabled]="historyPage >= historyTotalPages || historyTotalPages === 0" (click)="nextHistoryPage()">Sau</button>
+      </div>
+    </div>
+  </section>
+</div>

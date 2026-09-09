@@ -1,0 +1,74 @@
+<section class="page-header">
+  <div>
+    <h1>{{ isEdit ? 'Chỉnh sửa hàng hóa' : 'Thêm hàng hóa' }}</h1>
+    <p>Các trường có dấu * là bắt buộc.</p>
+  </div>
+  <a class="btn" routerLink="/products">Quay lại</a>
+</section>
+
+<div *ngIf="errorMessage" class="alert error">
+  {{ errorMessage }}
+  <button *ngIf="loadFailed" type="button" class="btn small" (click)="retryLoad()">Thử lại</button>
+</div>
+<div *ngIf="loading" class="card loading">Đang tải thông tin hàng hóa...</div>
+
+<form *ngIf="!loading && !loadFailed" class="card form-card" [formGroup]="form" (ngSubmit)="submit()">
+  <div class="form-grid">
+    <div class="field">
+      <label>Danh mục *</label>
+      <select formControlName="categoryId">
+        <option [ngValue]="null">-- Chọn danh mục --</option>
+        <option *ngFor="let item of categories" [ngValue]="item.id" [disabled]="isCategoryDisabled(item)">
+          {{ item.categoryCode }} - {{ item.categoryName }}{{ item.isActive ? '' : ' (Ngừng hoạt động)' }}
+        </option>
+      </select>
+      <small class="field-error" *ngIf="fieldError('categoryId')">{{ fieldError('categoryId') }}</small>
+    </div>
+    <div class="field">
+      <label>Mã hàng hóa</label>
+      <div class="readonly-code-field">
+        <input formControlName="productCode">
+        <span class="code-badge">Tự động</span>
+      </div>
+    </div>
+    <div class="field">
+      <label>Tên hàng hóa *</label>
+      <input formControlName="productName" maxlength="250" placeholder="Thịt bò Mỹ">
+      <small class="field-error" *ngIf="fieldError('productName')">{{ fieldError('productName') }}</small>
+    </div>
+    <div class="field">
+      <label>Đơn vị tính *</label>
+      <input formControlName="unit" maxlength="50" list="unit-options" placeholder="Kg, Hộp, Chai...">
+      <datalist id="unit-options">
+        <option *ngFor="let unit of units" [value]="unit"></option>
+      </datalist>
+      <small class="field-error" *ngIf="fieldError('unit')">{{ fieldError('unit') }}</small>
+    </div>
+    <div class="field">
+      <label>Giá bán *</label>
+      <input type="number" min="0" max="90000000000000" step="0.01" formControlName="price" placeholder="0">
+      <small class="field-error" *ngIf="fieldError('price')">{{ fieldError('price') }}</small>
+    </div>
+    <div class="field">
+      <label>Số lượng tồn *</label>
+      <input type="number" min="0" max="90000000000000" step="0.01" formControlName="quantity" placeholder="0">
+      <small class="field-error" *ngIf="fieldError('quantity')">{{ fieldError('quantity') }}</small>
+    </div>
+    <div class="field full">
+      <label>Mô tả</label>
+      <textarea rows="4" maxlength="1000" formControlName="description" placeholder="Thông tin thêm về hàng hóa"></textarea>
+      <small class="field-error" *ngIf="fieldError('description')">{{ fieldError('description') }}</small>
+    </div>
+    <label class="checkbox full">
+      <input type="checkbox" formControlName="isActive">
+      <span>Đang kinh doanh</span>
+    </label>
+  </div>
+
+  <div class="form-actions">
+    <a class="btn" routerLink="/products">Hủy</a>
+    <button class="btn primary" type="submit" [disabled]="saving || previewLoading">
+      {{ saving ? 'Đang lưu...' : 'Lưu' }}
+    </button>
+  </div>
+</form>

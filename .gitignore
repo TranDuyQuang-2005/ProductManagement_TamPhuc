@@ -1,0 +1,113 @@
+# ==========================================================
+# ProductManagement - Git Ignore
+# ==========================================================
+
+
+# ==========================================================
+# .NET build/cache
+# ==========================================================
+**/bin/
+**/obj/
+.vs/
+
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+
+# ==========================================================
+# Angular / Node
+# ==========================================================
+**/node_modules/
+**/dist/
+**/.angular/
+**/.cache/
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+
+# ==========================================================
+# IDE
+# ==========================================================
+.vscode/
+.idea/
+
+
+# ==========================================================
+# Local environment / secrets
+# ==========================================================
+.env
+.env.*
+!.env.example
+
+backend/ProductManagement.Api/appsettings.Development.json
+
+
+# ==========================================================
+# API manual test
+# ==========================================================
+backend/ProductManagement.Api/ProductManagement.Api.http
+# Local backend configuration / secrets
+backend/ProductManagement.Api/appsettings.json
+backend/ProductManagement.Api/appsettings.Development.json
+
+
+# ==========================================================
+# Documentation / QA documents
+# ==========================================================
+docs/
+
+
+# ==========================================================
+# Test / verification scripts
+# ==========================================================
+scripts/
+
+
+# ==========================================================
+# Database verification / reset scripts
+# ==========================================================
+database/05_VerifyDatabase.sql
+database/06_FixIdentityKeyLengths.sql
+database/99_ResetDatabase.sql
+
+
+# ==========================================================
+# Test output / coverage
+# ==========================================================
+TestResults/
+test-results/
+coverage/
+reports/
+
+
+# ==========================================================
+# Temporary/log files
+# ==========================================================
+*.log
+*.tmp
+*.temp
+tmp/
+temp/
+logs/
+
+
+# ==========================================================
+# SQL Server physical / backup files
+# ==========================================================
+*.mdf
+*.ndf
+*.ldf
+*.bak
+*.trn
+
+readme.md
+# ==========================================================
+# OS generated
+# ==========================================================
+.DS_Store
+Thumbs.db
+desktop.ini

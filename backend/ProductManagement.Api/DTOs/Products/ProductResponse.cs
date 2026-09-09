@@ -1,0 +1,25 @@
+namespace ProductManagement.Api.DTOs.Products;
+
+public sealed record ProductResponse(
+    int Id,
+    string ProductCode,
+    string ProductName,
+    int CategoryId,
+    string CategoryCode,
+    string CategoryName,
+    bool CategoryIsActive,
+    string Unit,
+    decimal Price,
+    decimal Quantity,
+    string StockStatus,
+    string? Description,
+    bool IsActive,
+    string? CreatedByUserId,
+    string? CreatedByUsername,
+    string? CreatedByRole,
+    string? LastModifiedByUserId,
+    string? LastModifiedByUsername,
+    string? LastModifiedByRole,
+    bool IsAdminProtected,
+    DateTime CreatedAt,
+    DateTime? UpdatedAt);

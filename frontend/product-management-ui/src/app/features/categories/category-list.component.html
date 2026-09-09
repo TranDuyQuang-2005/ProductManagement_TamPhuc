@@ -1,0 +1,119 @@
+<section class="page-header">
+  <div>
+    <h1>Danh mục hàng hóa</h1>
+    <p>Quản lý nhóm hàng hóa, ký hiệu mã và trạng thái sử dụng.</p>
+  </div>
+  <a class="btn primary" routerLink="/categories/new">+ Thêm danh mục</a>
+</section>
+
+<div *ngIf="message" class="alert success">{{ message }}</div>
+<div *ngIf="errorMessage" class="alert error">
+  {{ errorMessage }}
+  <button type="button" class="btn small" (click)="retryLoad()">Thử lại</button>
+</div>
+
+<form class="card filters" [formGroup]="filterForm" (ngSubmit)="search()">
+  <div class="field grow">
+    <label>Từ khóa</label>
+    <input formControlName="keyword" placeholder="Ví dụ: DM001 hoặc Hải sản">
+  </div>
+  <div class="field">
+    <label>Trạng thái</label>
+    <select formControlName="isActive">
+      <option [ngValue]="null">Tất cả</option>
+      <option [ngValue]="true">Hoạt động</option>
+      <option [ngValue]="false">Ngừng hoạt động</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Sắp xếp</label>
+    <select formControlName="sortBy">
+      <option value="createdAt">Ngày tạo</option>
+      <option value="categoryCode">Mã danh mục</option>
+      <option value="categoryName">Tên danh mục</option>
+      <option value="productCount">Số hàng hóa</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Chiều</label>
+    <select formControlName="sortDirection">
+      <option value="desc">Giảm dần</option>
+      <option value="asc">Tăng dần</option>
+    </select>
+  </div>
+  <div class="filter-actions">
+    <button type="button" class="btn" (click)="reset()">Đặt lại</button>
+    <button type="submit" class="btn primary">Tìm kiếm</button>
+  </div>
+</form>
+
+<div class="card table-wrap">
+  <div *ngIf="loading" class="loading">Đang tải danh sách danh mục...</div>
+  <table *ngIf="!loading">
+    <thead>
+      <tr>
+        <th>Mã</th><th>Tên danh mục</th><th>Ký hiệu</th><th class="number">Số hàng hóa</th><th>Trạng thái</th><th>Thao tác</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let category of categories">
+        <td><strong>{{ category.categoryCode }}</strong></td>
+        <td>{{ category.categoryName }}</td>
+        <td><span class="badge">{{ category.codePrefix }}</span></td>
+        <td class="number">{{ category.productCount }}</td>
+        <td>
+          <span class="badge" [class.good]="category.isActive" [class.muted]="!category.isActive">
+            {{ category.isActive ? 'Hoạt động' : 'Ngừng hoạt động' }}
+          </span>
+        </td>
+        <td class="actions table-actions">
+          <ng-container *ngIf="canModifyCategory(category); else lockedEdit">
+            <a class="btn small action-btn" [routerLink]="['/categories', category.id, 'edit']">Sửa</a>
+          </ng-container>
+          <ng-template #lockedEdit>
+            <span class="action-tooltip" [title]="editTitle(category)">
+              <button class="btn small action-btn" type="button" disabled>
+                <span class="lock-icon" aria-hidden="true"></span>
+                Sửa
+              </button>
+            </span>
+          </ng-template>
+          <span class="action-tooltip" [title]="deleteTitle(category)">
+            <button
+              class="btn small danger action-btn"
+              type="button"
+              [disabled]="!canDeleteCategory(category) || category.productCount > 0 || deletingId !== null"
+              (click)="deleteCategory(category)">
+              <span *ngIf="!canDeleteCategory(category)" class="lock-icon" aria-hidden="true"></span>
+              {{ deletingId === category.id ? 'Đang xóa...' : 'Xóa' }}
+            </button>
+          </span>
+        </td>
+      </tr>
+      <tr *ngIf="categories.length === 0">
+        <td colspan="6" class="empty">Chưa có danh mục phù hợp với điều kiện tìm kiếm.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="pagination" *ngIf="!loading">
+    <span>Tổng: <strong>{{ totalItems }}</strong> bản ghi</span>
+    <div>
+      <button class="btn small" [disabled]="page <= 1" (click)="previousPage()">Trước</button>
+      <span>Trang {{ page }} / {{ totalPages || 1 }}</span>
+      <button class="btn small" [disabled]="page >= totalPages || totalPages === 0" (click)="nextPage()">Sau</button>
+    </div>
+  </div>
+</div>
+
+<app-confirm-dialog
+  [open]="pendingDeleteCategory !== null"
+  title="Xác nhận xóa"
+  message="Bạn có chắc chắn muốn xóa danh mục"
+  [target]="pendingDeleteCategory ? '&quot;' + pendingDeleteCategory.categoryName + '&quot; (' + pendingDeleteCategory.categoryCode + ')?' : ''"
+  warning="Thao tác này không thể hoàn tác."
+  confirmLabel="Xóa danh mục"
+  loadingLabel="Đang xóa..."
+  [loading]="deletingId !== null"
+  (cancel)="cancelDeleteCategory()"
+  (confirm)="confirmDeleteCategory()" />
