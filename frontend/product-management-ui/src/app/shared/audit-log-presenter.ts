@@ -27,6 +27,9 @@ const ACTION_LABELS: Record<string, string> = {
   CREATE: 'Thêm mới',
   UPDATE: 'Cập nhật',
   DELETE: 'Xóa',
+  RESTORE: 'Khôi phục',
+  PERMANENT_DELETE: 'Xóa vĩnh viễn',
+  STOCK_IN: 'Nhập hàng',
   LOGIN: 'Đăng nhập',
   LOGIN_FAILED: 'Đăng nhập thất bại'
 };
@@ -43,7 +46,7 @@ const FIELD_LABELS: Record<string, string> = {
   categoryId: 'Danh mục',
   unit: 'Đơn vị tính',
   price: 'Giá bán',
-  quantity: 'Số lượng tồn',
+  stockQuantity: 'Tồn kho',
   description: 'Mô tả',
   isActive: 'Trạng thái',
   categoryCode: 'Mã danh mục',
@@ -63,8 +66,10 @@ const HIDDEN_FIELDS = new Set([
   'lastModifiedByUserId',
   'createdByUsername',
   'lastModifiedByUsername',
-  'createdByRole',
-  'lastModifiedByRole',
+  'isDeleted',
+  'deletedAt',
+  'deletedByUserId',
+  'deletedByUsername',
   'isAdminProtected',
   'canModify',
   'canEdit',
@@ -122,9 +127,9 @@ export function getAuditDetailView(log: AuditLogLike): AuditDetailView {
   const oldSnapshot = parseRecord(log.oldValues);
   const newSnapshot = parseRecord(log.newValues);
 
-  if (action === 'UPDATE') {
+  if (action === 'UPDATE' || action === 'STOCK_IN') {
     return {
-      title: 'Chi tiết thay đổi',
+      title: action === 'STOCK_IN' ? 'Nhập hàng' : 'Chi tiết thay đổi',
       mode: 'changes',
       items: getChangedFieldKeys(log, oldSnapshot, newSnapshot)
         .filter(field => !isHiddenField(field))
@@ -153,6 +158,22 @@ export function getAuditDetailView(log: AuditLogLike): AuditDetailView {
     };
   }
 
+  if (action === 'RESTORE') {
+    return {
+      title: `Đã khôi phục ${getEntityLabel(entity).toLowerCase()}`,
+      mode: 'snapshot',
+      items: snapshotItems(newSnapshot, entity)
+    };
+  }
+
+  if (action === 'PERMANENT_DELETE') {
+    return {
+      title: `Đã xóa vĩnh viễn ${getEntityLabel(entity).toLowerCase()}`,
+      mode: 'snapshot',
+      items: snapshotItems(oldSnapshot, entity)
+    };
+  }
+
   return {
     title: getActionLabel(action),
     mode: 'empty',
@@ -176,6 +197,11 @@ export function formatAuditValue(field: string, value: unknown): string {
   if (normalized === 'price') {
     const numberValue = Number(value);
     if (Number.isFinite(numberValue)) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(numberValue)} VND`;
+  }
+
+  if (normalized === 'stockQuantity') {
+    const numberValue = Number(value);
+    if (Number.isFinite(numberValue)) return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(numberValue);
   }
 
   if (Array.isArray(value)) return value.map(item => formatEmpty(item)).join(', ');

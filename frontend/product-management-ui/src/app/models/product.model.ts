@@ -10,20 +10,22 @@ export interface Product {
   categoryIsActive: boolean;
   unit: string;
   price: number;
-  quantity: number;
+  stockQuantity: number;
   stockStatus: string;
   description: string | null;
   isActive: boolean;
   createdByUserId: string | null;
   createdByUsername: string | null;
-  createdByRole: string | null;
   lastModifiedByUserId: string | null;
   lastModifiedByUsername: string | null;
-  lastModifiedByRole: string | null;
   isAdminProtected: boolean;
   canModify?: boolean;
   canEdit?: boolean;
   canDelete?: boolean;
+  isDeleted: boolean;
+  deletedAt: string | null;
+  deletedByUserId: string | null;
+  deletedByUsername: string | null;
   createdAt: string;
   updatedAt: string | null;
 }
@@ -33,7 +35,6 @@ export interface ProductCreatePayload {
   categoryId: number;
   unit: string;
   price: number;
-  quantity: number;
   description: string | null;
   isActive: boolean;
 }
@@ -42,9 +43,15 @@ export interface ProductUpdatePayload {
   productName: string;
   unit: string;
   price: number;
-  quantity: number;
   description: string | null;
   isActive: boolean;
+}
+
+export interface StockInPayload {
+  productId: number;
+  quantity: number;
+  referenceCode: string | null;
+  note: string | null;
 }
 
 export interface ProductSearchParams {

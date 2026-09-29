@@ -4,15 +4,15 @@
     <div *ngIf="errorMessage" class="alert error">{{ errorMessage }}</div>
     <div class="field">
       <label>Tên đăng nhập</label>
-      <input formControlName="username" autocomplete="username">
+      <input data-testid="login-username" formControlName="username" autocomplete="username">
       <small class="field-error" *ngIf="fieldError('username')">{{ fieldError('username') }}</small>
     </div>
     <div class="field">
       <label>Mật khẩu</label>
-      <input type="password" formControlName="password" autocomplete="current-password">
+      <input data-testid="login-password" type="password" formControlName="password" autocomplete="current-password">
       <small class="field-error" *ngIf="fieldError('password')">{{ fieldError('password') }}</small>
     </div>
-    <button class="btn primary login-submit" type="submit" [disabled]="loading">
+    <button data-testid="login-submit" class="btn primary login-submit" type="submit" [disabled]="loading">
       {{ loading ? 'Đang đăng nhập...' : 'Đăng nhập' }}
     </button>
   </form>

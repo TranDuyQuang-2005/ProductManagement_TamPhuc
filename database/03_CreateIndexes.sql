@@ -1,8 +1,12 @@
 USE [ProductManagementDB];
 GO
 
-IF COL_LENGTH(N'dbo.Categories', N'CodePrefix') IS NULL
-    THROW 51100, 'Missing Categories.CodePrefix. Run the corrected 02_CreateTables.sql before 03_CreateIndexes.sql.', 1;
+IF COL_LENGTH(N'dbo.Products', N'StockQuantity') IS NULL
+    THROW 51101, 'Missing Products.StockQuantity. Run 02_CreateTables.sql first.', 1;
+GO
+
+IF OBJECT_ID(N'dbo.InventoryTransactions', N'U') IS NULL
+    THROW 51102, 'Missing dbo.InventoryTransactions. Run 02_CreateTables.sql first.', 1;
 GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_Categories_CategoryCode' AND object_id = OBJECT_ID(N'dbo.Categories'))
@@ -27,6 +31,41 @@ GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Products_CategoryId' AND object_id = OBJECT_ID(N'dbo.Products'))
     CREATE NONCLUSTERED INDEX IX_Products_CategoryId ON dbo.Products(CategoryId);
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Products_ActiveSearch' AND object_id = OBJECT_ID(N'dbo.Products'))
+    CREATE NONCLUSTERED INDEX IX_Products_ActiveSearch
+    ON dbo.Products(IsDeleted, CategoryId, IsActive, CreatedAt DESC)
+    INCLUDE (ProductCode, ProductName, Unit, Price, StockQuantity);
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Products_TrashSearch' AND object_id = OBJECT_ID(N'dbo.Products'))
+    CREATE NONCLUSTERED INDEX IX_Products_TrashSearch
+    ON dbo.Products(IsDeleted, DeletedAt DESC, CategoryId)
+    INCLUDE (ProductCode, ProductName, Unit, Price, StockQuantity, IsActive);
+GO
+
+IF ISNULL(FULLTEXTSERVICEPROPERTY('IsFullTextInstalled'), 0) = 1
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = N'FTC_ProductManagement_Products')
+        EXEC(N'CREATE FULLTEXT CATALOG FTC_ProductManagement_Products AS DEFAULT;');
+
+    IF NOT EXISTS (SELECT 1 FROM sys.fulltext_indexes WHERE object_id = OBJECT_ID(N'dbo.Products'))
+        EXEC(N'CREATE FULLTEXT INDEX ON dbo.Products(ProductName LANGUAGE 0)
+            KEY INDEX PK_Products
+            ON FTC_ProductManagement_Products
+            WITH CHANGE_TRACKING AUTO;');
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_InventoryTransactions_ProductId_CreatedAt' AND object_id = OBJECT_ID(N'dbo.InventoryTransactions'))
+    CREATE NONCLUSTERED INDEX IX_InventoryTransactions_ProductId_CreatedAt
+    ON dbo.InventoryTransactions(ProductId, CreatedAt DESC);
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_InventoryTransactions_CreatedByUserId' AND object_id = OBJECT_ID(N'dbo.InventoryTransactions'))
+    CREATE NONCLUSTERED INDEX IX_InventoryTransactions_CreatedByUserId
+    ON dbo.InventoryTransactions(CreatedByUserId);
 GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_AuditLogs_CreatedAt' AND object_id = OBJECT_ID(N'dbo.AuditLogs'))

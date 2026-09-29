@@ -12,9 +12,9 @@ import { ToastContainerComponent } from './shared/toast-container.component';
     <header class="topbar" *ngIf="authService.authState$ | async as auth">
       <div class="brand">Product Management</div>
       <nav>
-        <a routerLink="/products" routerLinkActive="active">Hàng hóa</a>
-        <a routerLink="/categories" routerLinkActive="active">Danh mục</a>
-        <a routerLink="/audit-logs" routerLinkActive="active">Nhật ký</a>
+        <a data-testid="nav-products" routerLink="/products" routerLinkActive="active">Hàng hóa</a>
+        <a data-testid="nav-categories" routerLink="/categories" routerLinkActive="active">Danh mục</a>
+        <a data-testid="nav-audit" routerLink="/audit-logs" routerLinkActive="active">Nhật ký</a>
       </nav>
       <div class="user-box">
         <div>

@@ -27,6 +27,8 @@ export class AuditLogListComponent implements OnInit {
     { value: 'CREATE', label: mapActionLabel('CREATE') },
     { value: 'UPDATE', label: mapActionLabel('UPDATE') },
     { value: 'DELETE', label: mapActionLabel('DELETE') },
+    { value: 'RESTORE', label: mapActionLabel('RESTORE') },
+    { value: 'PERMANENT_DELETE', label: mapActionLabel('PERMANENT_DELETE') },
     { value: 'LOGIN', label: mapActionLabel('LOGIN') },
     { value: 'LOGIN_FAILED', label: mapActionLabel('LOGIN_FAILED') }
   ];

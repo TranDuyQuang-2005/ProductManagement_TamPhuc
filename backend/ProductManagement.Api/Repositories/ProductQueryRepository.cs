@@ -15,19 +15,92 @@ public sealed class ProductQueryRepository(DapperContext context) : IProductQuer
             ["productName"] = "p.ProductName",
             ["categoryName"] = "c.CategoryName",
             ["price"] = "p.Price",
-            ["quantity"] = "p.Quantity",
+            ["stockQuantity"] = "p.StockQuantity",
             ["createdAt"] = "p.CreatedAt"
         };
 
     public async Task<PagedResult<ProductResponse>> SearchAsync(ProductSearchRequest request, CancellationToken cancellationToken)
-    {
-        var where = new List<string> { "1 = 1" };
-        var parameters = new DynamicParameters();
+        => await SearchCoreAsync(request, isDeleted: false, cancellationToken);
 
-        if (!string.IsNullOrWhiteSpace(request.Keyword))
+    public async Task<PagedResult<ProductResponse>> SearchTrashAsync(ProductSearchRequest request, CancellationToken cancellationToken)
+        => await SearchCoreAsync(request, isDeleted: true, cancellationToken);
+
+    public async Task<ProductResponse?> GetByIdAsync(int id, CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT
+                p.Id,
+                p.ProductCode,
+                p.ProductName,
+                p.CategoryId,
+                c.CategoryCode,
+                c.CategoryName,
+                c.IsActive AS CategoryIsActive,
+                p.Unit,
+                p.Price,
+                p.StockQuantity,
+                CASE WHEN p.StockQuantity > 0 THEN N'Còn hàng' ELSE N'Hết hàng' END AS StockStatus,
+                p.Description,
+                p.IsActive,
+                p.CreatedByUserId,
+                createdUser.UserName AS CreatedByUsername,
+                p.LastModifiedByUserId,
+                modifiedUser.UserName AS LastModifiedByUsername,
+                p.IsAdminProtected,
+                p.IsDeleted,
+                p.DeletedAt,
+                p.DeletedByUserId,
+                deletedUser.UserName AS DeletedByUsername,
+                p.CreatedAt,
+                p.UpdatedAt
+            FROM dbo.Products p
+            INNER JOIN dbo.Categories c ON c.Id = p.CategoryId
+            LEFT JOIN dbo.AspNetUsers createdUser ON createdUser.Id = p.CreatedByUserId
+            LEFT JOIN dbo.AspNetUsers modifiedUser ON modifiedUser.Id = p.LastModifiedByUserId
+            LEFT JOIN dbo.AspNetUsers deletedUser ON deletedUser.Id = p.DeletedByUserId
+            WHERE p.Id = @Id AND p.IsDeleted = 0;
+            """;
+
+        await using var connection = context.CreateConnection();
+        var command = new CommandDefinition(sql, new { Id = id }, cancellationToken: cancellationToken);
+        return await connection.QuerySingleOrDefaultAsync<ProductResponse>(command);
+    }
+
+    private async Task<PagedResult<ProductResponse>> SearchCoreAsync(
+        ProductSearchRequest request,
+        bool isDeleted,
+        CancellationToken cancellationToken)
+    {
+        var where = new List<string> { "p.IsDeleted = @IsDeleted" };
+        var parameters = new DynamicParameters();
+        parameters.Add("IsDeleted", isDeleted);
+
+        await using var connection = context.CreateConnection();
+        var keyword = TextNormalization.NormalizeNfcOrNull(request.Keyword);
+        var requiresLiteralNameSearch = !string.IsNullOrEmpty(keyword) && RequiresLiteralNameSearch(keyword);
+        var fullTextQuery = string.IsNullOrWhiteSpace(keyword) || requiresLiteralNameSearch
+            ? null
+            : BuildFullTextQuery(keyword);
+        var useFullText = !requiresLiteralNameSearch
+                          && !string.IsNullOrWhiteSpace(fullTextQuery)
+                          && await IsProductNameFullTextEnabledAsync(connection, cancellationToken);
+        var useNameContainsSearch = !string.IsNullOrWhiteSpace(keyword)
+                                    && (requiresLiteralNameSearch || !useFullText);
+
+        if (!string.IsNullOrWhiteSpace(keyword))
         {
-            where.Add("(CHARINDEX(@Keyword, p.ProductCode) > 0 OR CHARINDEX(@Keyword, p.ProductName) > 0)");
-            parameters.Add("Keyword", request.Keyword.Trim());
+            var nameSearchSql = useFullText
+                ? "(p.ProductName LIKE @KeywordPrefix ESCAPE N'~' OR ft.[KEY] IS NOT NULL)"
+                : useNameContainsSearch
+                    ? "p.ProductName LIKE @KeywordContains ESCAPE N'~'"
+                    : "p.ProductName LIKE @KeywordPrefix ESCAPE N'~'";
+
+            where.Add($"(p.ProductCode = @Keyword OR p.ProductCode LIKE @KeywordPrefix ESCAPE N'~' OR {nameSearchSql})");
+            parameters.Add("Keyword", keyword);
+            var escapedKeyword = EscapeLikePattern(keyword);
+            parameters.Add("KeywordPrefix", escapedKeyword + "%");
+            parameters.Add("KeywordContains", $"%{escapedKeyword}%");
+            if (useFullText) parameters.Add("FullTextQuery", fullTextQuery);
         }
 
         if (request.CategoryId.HasValue)
@@ -57,20 +130,30 @@ public sealed class ProductQueryRepository(DapperContext context) : IProductQuer
         switch (request.StockStatus)
         {
             case StockStatusFilter.InStock:
-                where.Add("p.Quantity > 0");
+                where.Add("p.StockQuantity > 0");
                 break;
             case StockStatusFilter.OutOfStock:
-                where.Add("p.Quantity = 0");
+                where.Add("p.StockQuantity = 0");
                 break;
         }
 
         var sortColumn = SortColumns.TryGetValue(request.SortBy, out var mapped) ? mapped : SortColumns["createdAt"];
         var sortDirection = string.Equals(request.SortDirection, "asc", StringComparison.OrdinalIgnoreCase) ? "ASC" : "DESC";
-        var offset = (request.Page - 1) * request.PageSize;
-        parameters.Add("Offset", offset);
+        parameters.Add("Offset", (request.Page - 1) * request.PageSize);
         parameters.Add("PageSize", request.PageSize);
 
         var whereSql = string.Join(" AND ", where);
+        var fullTextJoin = useFullText
+            ? "LEFT JOIN CONTAINSTABLE(dbo.Products, ProductName, @FullTextQuery) ft ON ft.[KEY] = p.Id"
+            : string.Empty;
+        var keywordOrder = string.IsNullOrWhiteSpace(keyword)
+            ? string.Empty
+            : useFullText
+                ? "CASE WHEN p.ProductCode = @Keyword THEN 0 WHEN p.ProductCode LIKE @KeywordPrefix ESCAPE N'~' THEN 1 WHEN ft.[RANK] IS NOT NULL THEN 2 WHEN p.ProductName LIKE @KeywordPrefix ESCAPE N'~' THEN 3 ELSE 4 END ASC, ISNULL(ft.[RANK], 0) DESC,"
+                : useNameContainsSearch
+                    ? "CASE WHEN p.ProductCode = @Keyword THEN 0 WHEN p.ProductCode LIKE @KeywordPrefix ESCAPE N'~' THEN 1 WHEN p.ProductName LIKE @KeywordPrefix ESCAPE N'~' THEN 2 WHEN p.ProductName LIKE @KeywordContains ESCAPE N'~' THEN 3 ELSE 4 END ASC,"
+                    : "CASE WHEN p.ProductCode = @Keyword THEN 0 WHEN p.ProductCode LIKE @KeywordPrefix ESCAPE N'~' THEN 1 WHEN p.ProductName LIKE @KeywordPrefix ESCAPE N'~' THEN 2 ELSE 3 END ASC,";
+
         var sql = $"""
             SELECT
                 p.Id,
@@ -82,32 +165,38 @@ public sealed class ProductQueryRepository(DapperContext context) : IProductQuer
                 c.IsActive AS CategoryIsActive,
                 p.Unit,
                 p.Price,
-                p.Quantity,
-                CASE WHEN p.Quantity > 0 THEN N'Còn hàng' ELSE N'Hết hàng' END AS StockStatus,
+                p.StockQuantity,
+                CASE WHEN p.StockQuantity > 0 THEN N'Còn hàng' ELSE N'Hết hàng' END AS StockStatus,
                 p.Description,
                 p.IsActive,
                 p.CreatedByUserId,
-                p.CreatedByUsername,
-                p.CreatedByRole,
+                createdUser.UserName AS CreatedByUsername,
                 p.LastModifiedByUserId,
-                p.LastModifiedByUsername,
-                p.LastModifiedByRole,
-                CAST(CASE WHEN UPPER(ISNULL(p.CreatedByRole, N'')) <> N'STAFF' OR (p.LastModifiedByRole IS NOT NULL AND UPPER(p.LastModifiedByRole) <> N'STAFF') THEN 1 ELSE 0 END AS bit) AS IsAdminProtected,
+                modifiedUser.UserName AS LastModifiedByUsername,
+                p.IsAdminProtected,
+                p.IsDeleted,
+                p.DeletedAt,
+                p.DeletedByUserId,
+                deletedUser.UserName AS DeletedByUsername,
                 p.CreatedAt,
                 p.UpdatedAt
             FROM dbo.Products p
             INNER JOIN dbo.Categories c ON c.Id = p.CategoryId
+            LEFT JOIN dbo.AspNetUsers createdUser ON createdUser.Id = p.CreatedByUserId
+            LEFT JOIN dbo.AspNetUsers modifiedUser ON modifiedUser.Id = p.LastModifiedByUserId
+            LEFT JOIN dbo.AspNetUsers deletedUser ON deletedUser.Id = p.DeletedByUserId
+            {fullTextJoin}
             WHERE {whereSql}
-            ORDER BY {sortColumn} {sortDirection}, p.Id DESC
+            ORDER BY {keywordOrder} {sortColumn} {sortDirection}, p.Id DESC
             OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
 
             SELECT COUNT(1)
             FROM dbo.Products p
             INNER JOIN dbo.Categories c ON c.Id = p.CategoryId
+            {fullTextJoin}
             WHERE {whereSql};
             """;
 
-        await using var connection = context.CreateConnection();
         var command = new CommandDefinition(sql, parameters, cancellationToken: cancellationToken);
         using var grid = await connection.QueryMultipleAsync(command);
         var items = (await grid.ReadAsync<ProductResponse>()).AsList();
@@ -116,39 +205,60 @@ public sealed class ProductQueryRepository(DapperContext context) : IProductQuer
         return PagedResult<ProductResponse>.Create(items, request.Page, request.PageSize, totalItems);
     }
 
-    public async Task<ProductResponse?> GetByIdAsync(int id, CancellationToken cancellationToken)
+    private static async Task<bool> IsProductNameFullTextEnabledAsync(
+        System.Data.Common.DbConnection connection,
+        CancellationToken cancellationToken)
     {
         const string sql = """
-            SELECT
-                p.Id,
-                p.ProductCode,
-                p.ProductName,
-                p.CategoryId,
-                c.CategoryCode,
-                c.CategoryName,
-                c.IsActive AS CategoryIsActive,
-                p.Unit,
-                p.Price,
-                p.Quantity,
-                CASE WHEN p.Quantity > 0 THEN N'Còn hàng' ELSE N'Hết hàng' END AS StockStatus,
-                p.Description,
-                p.IsActive,
-                p.CreatedByUserId,
-                p.CreatedByUsername,
-                p.CreatedByRole,
-                p.LastModifiedByUserId,
-                p.LastModifiedByUsername,
-                p.LastModifiedByRole,
-                CAST(CASE WHEN UPPER(ISNULL(p.CreatedByRole, N'')) <> N'STAFF' OR (p.LastModifiedByRole IS NOT NULL AND UPPER(p.LastModifiedByRole) <> N'STAFF') THEN 1 ELSE 0 END AS bit) AS IsAdminProtected,
-                p.CreatedAt,
-                p.UpdatedAt
-            FROM dbo.Products p
-            INNER JOIN dbo.Categories c ON c.Id = p.CategoryId
-            WHERE p.Id = @Id;
+            SELECT CAST(CASE
+                WHEN ISNULL(FULLTEXTSERVICEPROPERTY('IsFullTextInstalled'), 0) = 1
+                 AND EXISTS (
+                    SELECT 1
+                    FROM sys.fulltext_indexes
+                    WHERE object_id = OBJECT_ID(N'dbo.Products')
+                 )
+                THEN 1 ELSE 0 END AS bit);
             """;
 
-        await using var connection = context.CreateConnection();
-        var command = new CommandDefinition(sql, new { Id = id }, cancellationToken: cancellationToken);
-        return await connection.QuerySingleOrDefaultAsync<ProductResponse>(command);
+        var command = new CommandDefinition(sql, cancellationToken: cancellationToken);
+        return await connection.ExecuteScalarAsync<bool>(command);
     }
+
+    private static string? BuildFullTextQuery(string keyword)
+    {
+        var terms = new List<string>();
+        var current = new List<char>();
+
+        foreach (var character in keyword)
+        {
+            if (char.IsLetterOrDigit(character))
+            {
+                current.Add(character);
+                continue;
+            }
+
+            AddCurrentTerm();
+        }
+
+        AddCurrentTerm();
+        return terms.Count == 0 ? null : string.Join(" AND ", terms);
+
+        void AddCurrentTerm()
+        {
+            if (current.Count == 0) return;
+            var term = new string(current.ToArray()).Replace("\"", "\"\"", StringComparison.Ordinal);
+            terms.Add($"\"{term}*\"");
+            current.Clear();
+        }
+    }
+
+    private static string EscapeLikePattern(string value)
+        => value
+            .Replace("~", "~~", StringComparison.Ordinal)
+            .Replace("%", "~%", StringComparison.Ordinal)
+            .Replace("_", "~_", StringComparison.Ordinal)
+            .Replace("[", "~[", StringComparison.Ordinal);
+
+    private static bool RequiresLiteralNameSearch(string value)
+        => value.Any(character => !char.IsLetterOrDigit(character) && !char.IsWhiteSpace(character));
 }

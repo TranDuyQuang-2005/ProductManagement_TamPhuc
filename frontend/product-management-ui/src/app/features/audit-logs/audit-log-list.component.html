@@ -37,11 +37,11 @@
   </div>
   <div class="field">
     <label>Mã đối tượng</label>
-    <input formControlName="entityCode" placeholder="DU000001">
+    <input data-testid="audit-entity-code" formControlName="entityCode" placeholder="DU000001">
   </div>
   <div class="filter-actions">
     <button type="button" class="btn" (click)="reset()">Đặt lại</button>
-    <button type="submit" class="btn primary">Tìm kiếm</button>
+    <button data-testid="audit-search-submit" type="submit" class="btn primary">Tìm kiếm</button>
   </div>
 </form>
 
@@ -54,7 +54,7 @@
       </tr>
     </thead>
     <tbody>
-      <tr *ngFor="let log of logs">
+      <tr *ngFor="let log of logs" [attr.data-testid]="'audit-row-' + log.action + '-' + (log.entityCode || 'none')">
         <td>{{ log.createdAt | date:'dd/MM/yyyy HH:mm' }}</td>
         <td>{{ log.username }}</td>
         <td><span class="badge audit-action-badge">{{ getActionLabel(log.action) }}</span></td>

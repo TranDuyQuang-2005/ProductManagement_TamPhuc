@@ -4,22 +4,22 @@ namespace ProductManagement.Api.DTOs.Products;
 
 public sealed class ProductCreateRequest
 {
-    [Required, StringLength(250)]
+    [Required(ErrorMessage = "Ten hang hoa la bat buoc.")]
+    [StringLength(250, ErrorMessage = "Ten hang hoa toi da 250 ky tu.")]
     public string ProductName { get; init; } = string.Empty;
 
-    [Range(1, int.MaxValue)]
+    [Range(1, int.MaxValue, ErrorMessage = "Vui long chon danh muc.")]
     public int CategoryId { get; init; }
 
-    [Required, StringLength(50)]
+    [Required(ErrorMessage = "Don vi tinh la bat buoc.")]
+    [StringLength(50, ErrorMessage = "Don vi tinh toi da 50 ky tu.")]
     public string Unit { get; init; } = string.Empty;
 
-    [Required, Range(typeof(decimal), "0", "9999999999999999.99")]
+    [Required(ErrorMessage = "Gia ban la bat buoc.")]
+    [Range(typeof(decimal), "0", "9999999999999999.99", ErrorMessage = "Gia ban nam ngoai pham vi cho phep.")]
     public decimal? Price { get; init; }
 
-    [Required, Range(typeof(decimal), "0", "9999999999999999.99")]
-    public decimal? Quantity { get; init; }
-
-    [StringLength(1000)]
+    [StringLength(1000, ErrorMessage = "Mo ta toi da 1000 ky tu.")]
     public string? Description { get; init; }
 
     public bool IsActive { get; init; } = true;

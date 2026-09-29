@@ -8,17 +8,18 @@ public sealed class Product
     public int CategoryId { get; set; }
     public string Unit { get; set; } = string.Empty;
     public decimal Price { get; set; }
-    public decimal Quantity { get; set; }
+    public decimal StockQuantity { get; set; }
     public string? Description { get; set; }
     public bool IsActive { get; set; } = true;
     public string? CreatedByUserId { get; set; }
-    public string? CreatedByUsername { get; set; }
-    public string? CreatedByRole { get; set; }
     public string? LastModifiedByUserId { get; set; }
-    public string? LastModifiedByUsername { get; set; }
-    public string? LastModifiedByRole { get; set; }
+    public bool IsAdminProtected { get; set; }
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
+    public string? DeletedByUserId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
     public Category Category { get; set; } = null!;
+    public ICollection<InventoryTransaction> InventoryTransactions { get; set; } = new List<InventoryTransaction>();
 }

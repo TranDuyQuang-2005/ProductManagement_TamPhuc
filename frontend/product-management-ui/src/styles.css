@@ -23,6 +23,7 @@ a { color: inherit; text-decoration: none; }
 .page-header { display: flex; justify-content: space-between; gap: 20px; align-items: center; margin-bottom: 20px; }
 .page-header h1 { margin: 0 0 5px; font-size: 28px; }
 .page-header p { margin: 0; color: #687386; }
+.header-actions { display: flex; gap: 8px; align-items: center; }
 .card { background: white; border: 1px solid #e1e7f0; border-radius: 12px; box-shadow: 0 3px 12px rgba(27,39,65,.04); }
 .filters { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; padding: 18px; margin-bottom: 18px; }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 150px; }
@@ -68,6 +69,7 @@ tr:last-child td { border-bottom: 0; }
 .actions { white-space: nowrap; }
 .table-actions { flex-wrap: nowrap; align-items: center; }
 .action-btn { width: 86px; height: 32px; padding: 6px 9px; }
+.action-btn.wide { width: 122px; }
 .action-tooltip { display: inline-flex; }
 .lock-icon {
   position: relative; display: inline-block; width: 10px; height: 8px;
@@ -110,6 +112,8 @@ tr:last-child td { border-bottom: 0; }
   position: fixed; inset: 0; background: rgba(15, 23, 42, .45); display: grid; place-items: center; padding: 20px; z-index: 20;
 }
 .modal { width: min(980px, 100%); max-height: 90vh; overflow: auto; padding: 20px; }
+.trash-modal { width: min(1120px, 100%); }
+.nested-table { border: 1px solid #edf1f6; border-radius: 8px; }
 .confirm-dialog { width: min(460px, 100%); box-shadow: 0 20px 60px rgba(15, 23, 42, .24); }
 .confirm-message { margin: 0 0 6px; color: #344054; }
 .confirm-target { margin: 0 0 14px; font-weight: 700; color: #172033; }

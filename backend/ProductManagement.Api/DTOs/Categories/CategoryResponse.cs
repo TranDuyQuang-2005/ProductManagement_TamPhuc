@@ -13,10 +13,8 @@ public sealed record CategoryResponse(
     bool CanEditPrefix,
     string? CreatedByUserId,
     string? CreatedByUsername,
-    string? CreatedByRole,
     string? LastModifiedByUserId,
     string? LastModifiedByUsername,
-    string? LastModifiedByRole,
     bool IsAdminProtected,
     DateTime CreatedAt,
     DateTime? UpdatedAt);

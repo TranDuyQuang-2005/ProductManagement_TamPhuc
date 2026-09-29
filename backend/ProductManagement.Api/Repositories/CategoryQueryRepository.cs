@@ -49,25 +49,30 @@ public sealed class CategoryQueryRepository(DapperContext context) : ICategoryQu
                 c.NextProductNumber,
                 c.Description,
                 c.IsActive,
-                COUNT(p.Id) AS ProductCount,
-                CAST(CASE WHEN COUNT(p.Id) > 0 THEN 1 ELSE 0 END AS bit) AS HasProducts,
-                CAST(CASE WHEN COUNT(p.Id) = 0 THEN 1 ELSE 0 END AS bit) AS CanEditPrefix,
+                activeProducts.ProductCount,
+                CAST(CASE WHEN allProducts.ProductCount > 0 THEN 1 ELSE 0 END AS bit) AS HasProducts,
+                CAST(CASE WHEN allProducts.ProductCount = 0 THEN 1 ELSE 0 END AS bit) AS CanEditPrefix,
                 c.CreatedByUserId,
-                c.CreatedByUsername,
-                c.CreatedByRole,
+                createdUser.UserName AS CreatedByUsername,
                 c.LastModifiedByUserId,
-                c.LastModifiedByUsername,
-                c.LastModifiedByRole,
-                CAST(CASE WHEN UPPER(ISNULL(c.CreatedByRole, N'')) <> N'STAFF' OR (c.LastModifiedByRole IS NOT NULL AND UPPER(c.LastModifiedByRole) <> N'STAFF') THEN 1 ELSE 0 END AS bit) AS IsAdminProtected,
+                modifiedUser.UserName AS LastModifiedByUsername,
+                c.IsAdminProtected,
                 c.CreatedAt,
                 c.UpdatedAt
             FROM dbo.Categories c
-            LEFT JOIN dbo.Products p ON p.CategoryId = c.Id
+            LEFT JOIN dbo.AspNetUsers createdUser ON createdUser.Id = c.CreatedByUserId
+            LEFT JOIN dbo.AspNetUsers modifiedUser ON modifiedUser.Id = c.LastModifiedByUserId
+            OUTER APPLY (
+                SELECT COUNT(1) AS ProductCount
+                FROM dbo.Products p
+                WHERE p.CategoryId = c.Id AND p.IsDeleted = 0
+            ) activeProducts
+            OUTER APPLY (
+                SELECT COUNT(1) AS ProductCount
+                FROM dbo.Products p
+                WHERE p.CategoryId = c.Id
+            ) allProducts
             WHERE {whereSql}
-            GROUP BY c.Id, c.CategoryCode, c.CategoryName, c.CodePrefix, c.NextProductNumber, c.Description, c.IsActive,
-                     c.CreatedByUserId, c.CreatedByUsername, c.CreatedByRole,
-                     c.LastModifiedByUserId, c.LastModifiedByUsername, c.LastModifiedByRole,
-                     c.CreatedAt, c.UpdatedAt
             ORDER BY {sortColumn} {sortDirection}, c.Id DESC
             OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
 
@@ -95,25 +100,30 @@ public sealed class CategoryQueryRepository(DapperContext context) : ICategoryQu
                 c.NextProductNumber,
                 c.Description,
                 c.IsActive,
-                COUNT(p.Id) AS ProductCount,
-                CAST(CASE WHEN COUNT(p.Id) > 0 THEN 1 ELSE 0 END AS bit) AS HasProducts,
-                CAST(CASE WHEN COUNT(p.Id) = 0 THEN 1 ELSE 0 END AS bit) AS CanEditPrefix,
+                activeProducts.ProductCount,
+                CAST(CASE WHEN allProducts.ProductCount > 0 THEN 1 ELSE 0 END AS bit) AS HasProducts,
+                CAST(CASE WHEN allProducts.ProductCount = 0 THEN 1 ELSE 0 END AS bit) AS CanEditPrefix,
                 c.CreatedByUserId,
-                c.CreatedByUsername,
-                c.CreatedByRole,
+                createdUser.UserName AS CreatedByUsername,
                 c.LastModifiedByUserId,
-                c.LastModifiedByUsername,
-                c.LastModifiedByRole,
-                CAST(CASE WHEN UPPER(ISNULL(c.CreatedByRole, N'')) <> N'STAFF' OR (c.LastModifiedByRole IS NOT NULL AND UPPER(c.LastModifiedByRole) <> N'STAFF') THEN 1 ELSE 0 END AS bit) AS IsAdminProtected,
+                modifiedUser.UserName AS LastModifiedByUsername,
+                c.IsAdminProtected,
                 c.CreatedAt,
                 c.UpdatedAt
             FROM dbo.Categories c
-            LEFT JOIN dbo.Products p ON p.CategoryId = c.Id
-            WHERE c.Id = @Id
-            GROUP BY c.Id, c.CategoryCode, c.CategoryName, c.CodePrefix, c.NextProductNumber, c.Description, c.IsActive,
-                     c.CreatedByUserId, c.CreatedByUsername, c.CreatedByRole,
-                     c.LastModifiedByUserId, c.LastModifiedByUsername, c.LastModifiedByRole,
-                     c.CreatedAt, c.UpdatedAt;
+            LEFT JOIN dbo.AspNetUsers createdUser ON createdUser.Id = c.CreatedByUserId
+            LEFT JOIN dbo.AspNetUsers modifiedUser ON modifiedUser.Id = c.LastModifiedByUserId
+            OUTER APPLY (
+                SELECT COUNT(1) AS ProductCount
+                FROM dbo.Products p
+                WHERE p.CategoryId = c.Id AND p.IsDeleted = 0
+            ) activeProducts
+            OUTER APPLY (
+                SELECT COUNT(1) AS ProductCount
+                FROM dbo.Products p
+                WHERE p.CategoryId = c.Id
+            ) allProducts
+            WHERE c.Id = @Id;
             """;
 
         await using var connection = context.CreateConnection();

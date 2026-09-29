@@ -11,10 +11,8 @@ export interface Category {
   canEditPrefix: boolean;
   createdByUserId: string | null;
   createdByUsername: string | null;
-  createdByRole: string | null;
   lastModifiedByUserId: string | null;
   lastModifiedByUsername: string | null;
-  lastModifiedByRole: string | null;
   isAdminProtected: boolean;
   canModify?: boolean;
   canEdit?: boolean;

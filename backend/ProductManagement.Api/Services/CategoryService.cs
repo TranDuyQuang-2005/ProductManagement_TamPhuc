@@ -32,7 +32,7 @@ public sealed partial class CategoryService(
 
     public async Task<CategoryResponse> GetByIdAsync(int id, CancellationToken cancellationToken)
         => await queryRepository.GetByIdAsync(id, cancellationToken)
-           ?? throw AppException.NotFound($"Khong tim thay danh muc co Id = {id}.");
+           ?? throw AppException.NotFound($"Không tìm thấy danh mục có Id = {id}.");
 
     public Task<IReadOnlyList<CategoryOptionResponse>> GetOptionsAsync(bool activeOnly, CancellationToken cancellationToken)
         => queryRepository.GetOptionsAsync(activeOnly, cancellationToken);
@@ -40,23 +40,23 @@ public sealed partial class CategoryService(
     public async Task<ProductCodePreviewResponse> GetProductCodePreviewAsync(int id, CancellationToken cancellationToken)
     {
         var preview = await queryRepository.GetProductCodePreviewAsync(id, cancellationToken)
-            ?? throw AppException.NotFound($"Khong tim thay danh muc co Id = {id}.");
+            ?? throw AppException.NotFound($"Không tìm thấy danh mục có Id = {id}.");
 
         return preview;
     }
 
     public async Task<CategoryResponse> CreateAsync(CategoryCreateRequest request, CancellationToken cancellationToken)
     {
-        var categoryCode = NormalizeCode(request.CategoryCode, "categoryCode", "Ma danh muc");
+        var categoryCode = NormalizeCode(request.CategoryCode, "categoryCode", "Mã danh mục");
         var categoryName = NormalizeName(request.CategoryName);
         var codePrefix = NormalizePrefix(request.CodePrefix);
         var description = NormalizeOptionalText(request.Description);
 
         if (await commandRepository.ExistsByCodeAsync(categoryCode, null, cancellationToken))
-            throw AppException.Conflict($"Ma danh muc '{categoryCode}' da ton tai.", "categoryCode", "Ma danh muc da ton tai.");
+            throw AppException.Conflict($"Mã danh mục '{categoryCode}' đã tồn tại.", "categoryCode", "Mã danh mục đã tồn tại.");
 
         if (await commandRepository.ExistsByPrefixAsync(codePrefix, null, cancellationToken))
-            throw AppException.Conflict($"Ky hieu danh muc \"{codePrefix}\" da duoc su dung.", "codePrefix", "Ky hieu danh muc da duoc su dung.");
+            throw AppException.Conflict($"Ký hiệu danh mục \"{codePrefix}\" đã được sử dụng.", "codePrefix", "Ký hiệu danh mục đã được sử dụng.");
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         var entity = new Category
@@ -68,15 +68,14 @@ public sealed partial class CategoryService(
             Description = description,
             IsActive = request.IsActive,
             CreatedByUserId = currentUser.UserId,
-            CreatedByUsername = currentUser.Username,
-            CreatedByRole = NormalizeRole(currentUser.Role),
+            IsAdminProtected = RecordAccessPolicy.ShouldProtectAfterAction(currentUser.Role, false),
             CreatedAt = DateTime.UtcNow
         };
 
         await commandRepository.AddAsync(entity, cancellationToken);
         await commandRepository.SaveChangesAsync(cancellationToken);
         await auditService.AddAsync("CREATE", "CATEGORY", entity.Id.ToString(), entity.CategoryCode, null,
-            CategorySnapshot(entity, 0), null, $"Created category {entity.CategoryCode}.", cancellationToken);
+            CategorySnapshot(entity, 0), null, $"Đã tạo danh mục {entity.CategoryCode}.", cancellationToken);
         await commandRepository.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return await GetByIdAsync(entity.Id, cancellationToken);
@@ -88,29 +87,29 @@ public sealed partial class CategoryService(
         var entity = await dbContext.Categories
             .FromSqlInterpolated($"SELECT * FROM dbo.Categories WITH (UPDLOCK, ROWLOCK) WHERE Id = {id}")
             .SingleOrDefaultAsync(cancellationToken)
-            ?? throw AppException.NotFound($"Khong tim thay danh muc co Id = {id}.");
+            ?? throw AppException.NotFound($"Không tìm thấy danh mục có Id = {id}.");
 
         RecordAccessPolicy.EnsureCanModify(
-            currentUser.Role, entity.CreatedByRole, entity.LastModifiedByRole, "Danh muc");
+            currentUser.Role, entity.IsAdminProtected, "Danh mục");
 
-        var categoryCode = NormalizeCode(request.CategoryCode, "categoryCode", "Ma danh muc");
+        var categoryCode = NormalizeCode(request.CategoryCode, "categoryCode", "Mã danh mục");
         var categoryName = NormalizeName(request.CategoryName);
         var codePrefix = NormalizePrefix(request.CodePrefix);
         var description = NormalizeOptionalText(request.Description);
 
         if (await commandRepository.ExistsByCodeAsync(categoryCode, id, cancellationToken))
-            throw AppException.Conflict($"Ma danh muc '{categoryCode}' da duoc su dung boi danh muc khac.", "categoryCode", "Ma danh muc da ton tai.");
+            throw AppException.Conflict($"Mã danh mục '{categoryCode}' đã được sử dụng bởi danh mục khác.", "categoryCode", "Mã danh mục đã tồn tại.");
 
         if (await commandRepository.ExistsByPrefixAsync(codePrefix, id, cancellationToken))
-            throw AppException.Conflict($"Ky hieu danh muc \"{codePrefix}\" da duoc su dung.", "codePrefix", "Ky hieu danh muc da duoc su dung.");
+            throw AppException.Conflict($"Ký hiệu danh mục \"{codePrefix}\" đã được sử dụng.", "codePrefix", "Ký hiệu danh mục đã được sử dụng.");
 
         var hasProducts = await productCommandRepository.AnyByCategoryIdAsync(id, cancellationToken);
         if (hasProducts && !string.Equals(entity.CodePrefix, codePrefix, StringComparison.Ordinal))
         {
             throw AppException.Conflict(
-                "Khong the thay doi ky hieu danh muc vi danh muc da co hang hoa.",
+                "Không thể thay đổi ký hiệu danh mục vì danh mục đã có hàng hóa.",
                 "codePrefix",
-                "Ky hieu khong the thay doi vi danh muc da co hang hoa.");
+                "Ký hiệu không thể thay đổi vì danh mục đã có hàng hóa.");
         }
 
         var oldSnapshot = CategorySnapshot(entity, hasProducts ? 1 : 0);
@@ -120,14 +119,13 @@ public sealed partial class CategoryService(
         entity.Description = description;
         entity.IsActive = request.IsActive!.Value;
         entity.LastModifiedByUserId = currentUser.UserId;
-        entity.LastModifiedByUsername = currentUser.Username;
-        entity.LastModifiedByRole = NormalizeRole(currentUser.Role);
+        entity.IsAdminProtected = RecordAccessPolicy.ShouldProtectAfterAction(currentUser.Role, entity.IsAdminProtected);
         entity.UpdatedAt = DateTime.UtcNow;
 
         await commandRepository.SaveChangesAsync(cancellationToken);
         var newSnapshot = CategorySnapshot(entity, hasProducts ? 1 : 0);
         await auditService.AddAsync("UPDATE", "CATEGORY", entity.Id.ToString(), entity.CategoryCode, oldSnapshot,
-            newSnapshot, GetChangedCategoryFields(oldSnapshot, newSnapshot), $"Updated category {entity.CategoryCode}.", cancellationToken);
+            newSnapshot, GetChangedCategoryFields(oldSnapshot, newSnapshot), $"Đã cập nhật danh mục {entity.CategoryCode}.", cancellationToken);
         await commandRepository.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return await GetByIdAsync(id, cancellationToken);
@@ -139,21 +137,21 @@ public sealed partial class CategoryService(
         var entity = await dbContext.Categories
             .FromSqlInterpolated($"SELECT * FROM dbo.Categories WITH (UPDLOCK, ROWLOCK) WHERE Id = {id}")
             .SingleOrDefaultAsync(cancellationToken)
-            ?? throw AppException.NotFound($"Khong tim thay danh muc co Id = {id}.");
+            ?? throw AppException.NotFound($"Không tìm thấy danh mục có Id = {id}.");
 
         RecordAccessPolicy.EnsureCanModify(
-            currentUser.Role, entity.CreatedByRole, entity.LastModifiedByRole, "Danh muc");
+            currentUser.Role, entity.IsAdminProtected, "Danh mục");
 
         if (await productCommandRepository.AnyByCategoryIdAsync(id, cancellationToken))
         {
-            throw AppException.Conflict("Khong the xoa danh muc vi dang co hang hoa thuoc danh muc nay.");
+            throw AppException.Conflict("Không thể xóa danh mục vì đang có hàng hóa thuộc danh mục này.");
         }
 
         var oldSnapshot = CategorySnapshot(entity, 0);
         commandRepository.Remove(entity);
         await commandRepository.SaveChangesAsync(cancellationToken);
         await auditService.AddAsync("DELETE", "CATEGORY", entity.Id.ToString(), entity.CategoryCode, oldSnapshot,
-            null, null, $"Deleted category {entity.CategoryCode}.", cancellationToken);
+            null, null, $"Đã xóa danh mục {entity.CategoryCode}.", cancellationToken);
         await commandRepository.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
@@ -161,18 +159,18 @@ public sealed partial class CategoryService(
     private static void ValidateSearchRequest(CategorySearchRequest request)
     {
         if (!AllowedSortFields.Contains(request.SortBy))
-            throw AppException.BadRequest("Truong sap xep khong hop le.", "sortBy", $"Chi ho tro: {string.Join(", ", AllowedSortFields)}.");
+            throw AppException.BadRequest("Trường sắp xếp không hợp lệ.", "sortBy", "Vui lòng chọn trường sắp xếp hợp lệ.");
 
         if (!string.Equals(request.SortDirection, "asc", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(request.SortDirection, "desc", StringComparison.OrdinalIgnoreCase))
-            throw AppException.BadRequest("Chieu sap xep khong hop le.", "sortDirection", "Chi chap nhan 'asc' hoac 'desc'.");
+            throw AppException.BadRequest("Chiều sắp xếp không hợp lệ.", "sortDirection", "Vui lòng chọn chiều sắp xếp hợp lệ.");
     }
 
     private static string NormalizeCode(string value, string field, string label)
     {
         var normalized = value.Trim().ToUpperInvariant();
         if (string.IsNullOrWhiteSpace(normalized))
-            throw AppException.BadRequest($"{label} la bat buoc.", field, "Khong duoc de trong.");
+            throw AppException.BadRequest($"{label} là bắt buộc.", field, "Không được để trống.");
         return normalized;
     }
 
@@ -180,7 +178,7 @@ public sealed partial class CategoryService(
     {
         var normalized = value.Trim();
         if (string.IsNullOrWhiteSpace(normalized))
-            throw AppException.BadRequest("Ten danh muc la bat buoc.", "categoryName", "Khong duoc de trong.");
+            throw AppException.BadRequest("Tên danh mục là bắt buộc.", "categoryName", "Không được để trống.");
         return normalized;
     }
 
@@ -190,9 +188,9 @@ public sealed partial class CategoryService(
         if (!CodePrefixRegex().IsMatch(normalized))
         {
             throw AppException.BadRequest(
-                "Ky hieu danh muc chi gom chu cai/so va dai tu 2 den 10 ky tu.",
+                "Ký hiệu danh mục chỉ gồm chữ cái/số và dài từ 2 đến 10 ký tự.",
                 "codePrefix",
-                "Chi chap nhan chu cai/so, tu 2 den 10 ky tu.");
+                "Chỉ chấp nhận chữ cái/số, từ 2 đến 10 ký tự.");
         }
 
         return normalized;
@@ -215,9 +213,6 @@ public sealed partial class CategoryService(
         if (oldValue.IsActive != newValue.IsActive) fields.Add(nameof(Category.IsActive));
         return fields;
     }
-
-    private static string NormalizeRole(string? role)
-        => string.IsNullOrWhiteSpace(role) ? string.Empty : role.Trim().ToUpperInvariant();
 
     [GeneratedRegex("^[A-Z0-9]{2,10}$")]
     private static partial Regex CodePrefixRegex();

@@ -16,7 +16,7 @@
   <div class="form-grid">
     <div class="field">
       <label>Danh mục *</label>
-      <select formControlName="categoryId">
+      <select data-testid="product-category" formControlName="categoryId">
         <option [ngValue]="null">-- Chọn danh mục --</option>
         <option *ngFor="let item of categories" [ngValue]="item.id" [disabled]="isCategoryDisabled(item)">
           {{ item.categoryCode }} - {{ item.categoryName }}{{ item.isActive ? '' : ' (Ngừng hoạt động)' }}
@@ -27,18 +27,18 @@
     <div class="field">
       <label>Mã hàng hóa</label>
       <div class="readonly-code-field">
-        <input formControlName="productCode">
+        <input data-testid="product-code" formControlName="productCode">
         <span class="code-badge">Tự động</span>
       </div>
     </div>
     <div class="field">
       <label>Tên hàng hóa *</label>
-      <input formControlName="productName" maxlength="250" placeholder="Thịt bò Mỹ">
+      <input data-testid="product-name" formControlName="productName" maxlength="250" placeholder="Thịt bò Mỹ">
       <small class="field-error" *ngIf="fieldError('productName')">{{ fieldError('productName') }}</small>
     </div>
     <div class="field">
       <label>Đơn vị tính *</label>
-      <input formControlName="unit" maxlength="50" list="unit-options" placeholder="Kg, Hộp, Chai...">
+      <input data-testid="product-unit" formControlName="unit" maxlength="50" list="unit-options" placeholder="Kg, Hộp, Chai...">
       <datalist id="unit-options">
         <option *ngFor="let unit of units" [value]="unit"></option>
       </datalist>
@@ -46,13 +46,8 @@
     </div>
     <div class="field">
       <label>Giá bán *</label>
-      <input type="number" min="0" max="90000000000000" step="0.01" formControlName="price" placeholder="0">
+      <input data-testid="product-price" type="number" min="0" max="90000000000000" step="0.01" formControlName="price" placeholder="0">
       <small class="field-error" *ngIf="fieldError('price')">{{ fieldError('price') }}</small>
-    </div>
-    <div class="field">
-      <label>Số lượng tồn *</label>
-      <input type="number" min="0" max="90000000000000" step="0.01" formControlName="quantity" placeholder="0">
-      <small class="field-error" *ngIf="fieldError('quantity')">{{ fieldError('quantity') }}</small>
     </div>
     <div class="field full">
       <label>Mô tả</label>
@@ -67,7 +62,7 @@
 
   <div class="form-actions">
     <a class="btn" routerLink="/products">Hủy</a>
-    <button class="btn primary" type="submit" [disabled]="saving || previewLoading">
+    <button data-testid="product-submit" class="btn primary" type="submit" [disabled]="saving || previewLoading">
       {{ saving ? 'Đang lưu...' : 'Lưu' }}
     </button>
   </div>

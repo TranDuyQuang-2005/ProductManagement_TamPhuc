@@ -6,7 +6,10 @@
     "ng": "ng",
     "start": "ng serve --open",
     "build": "ng build",
-    "watch": "ng build --watch --configuration development"
+    "watch": "ng build --watch --configuration development",
+    "test": "ng test --watch=false --browsers=ChromeHeadlessNoGpu",
+    "start:e2e": "ng serve --host localhost --port 4200",
+    "e2e": "node e2e/run-e2e.cjs"
   },
   "dependencies": {
     "@angular/common": "21.2.22",
@@ -23,6 +26,15 @@
     "@angular-devkit/build-angular": "21.2.22",
     "@angular/cli": "21.2.22",
     "@angular/compiler-cli": "21.2.22",
+    "@playwright/test": "^1.63.0",
+    "@types/jasmine": "^6.0.0",
+    "jasmine-core": "^4.6.1",
+    "karma": "^6.4.4",
+    "karma-chrome-launcher": "^3.2.0",
+    "karma-coverage": "^2.2.1",
+    "karma-jasmine": "^5.1.0",
+    "karma-jasmine-html-reporter": "^2.3.0",
+    "mssql": "^12.7.2",
     "typescript": "5.9.3"
   },
   "engines": {

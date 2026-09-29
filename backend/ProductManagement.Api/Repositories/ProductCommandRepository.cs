@@ -16,7 +16,7 @@ public sealed class ProductCommandRepository(AppDbContext dbContext) : IProductC
             cancellationToken);
 
     public Task<bool> AnyByCategoryIdAsync(int categoryId, CancellationToken cancellationToken)
-        => dbContext.Products.AnyAsync(x => x.CategoryId == categoryId, cancellationToken);
+        => dbContext.Products.IgnoreQueryFilters().AnyAsync(x => x.CategoryId == categoryId, cancellationToken);
 
     public async Task AddAsync(Product product, CancellationToken cancellationToken)
         => await dbContext.Products.AddAsync(product, cancellationToken);

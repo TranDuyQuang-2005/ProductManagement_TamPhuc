@@ -6,5 +6,6 @@ namespace ProductManagement.Api.Repositories.Interfaces;
 public interface IProductQueryRepository
 {
     Task<PagedResult<ProductResponse>> SearchAsync(ProductSearchRequest request, CancellationToken cancellationToken);
+    Task<PagedResult<ProductResponse>> SearchTrashAsync(ProductSearchRequest request, CancellationToken cancellationToken);
     Task<ProductResponse?> GetByIdAsync(int id, CancellationToken cancellationToken);
 }

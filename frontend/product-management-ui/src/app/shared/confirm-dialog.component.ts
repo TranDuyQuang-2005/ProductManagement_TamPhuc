@@ -15,8 +15,8 @@ import { Component, EventEmitter, HostListener, Input, Output } from '@angular/c
         <p class="confirm-target" *ngIf="target">{{ target }}</p>
         <p class="confirm-warning" *ngIf="warning">{{ warning }}</p>
         <div class="form-actions">
-          <button class="btn" type="button" [disabled]="loading" (click)="cancel.emit()">{{ cancelLabel }}</button>
-          <button class="btn danger solid" type="button" [disabled]="loading" (click)="confirm.emit()">
+          <button data-testid="confirm-cancel" class="btn" type="button" [disabled]="loading" (click)="cancel.emit()">{{ cancelLabel }}</button>
+          <button data-testid="confirm-accept" class="btn danger solid" type="button" [disabled]="loading" (click)="confirm.emit()">
             {{ loading ? loadingLabel : confirmLabel }}
           </button>
         </div>

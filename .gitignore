@@ -82,6 +82,7 @@ TestResults/
 test-results/
 coverage/
 reports/
+frontend/product-management-ui/e2e/.localappdata/
 
 
 # ==========================================================

@@ -16,18 +16,18 @@ public sealed class AuditLogService(IAuditLogQueryRepository queryRepository) : 
     {
         if (!AllowedSortFields.Contains(request.SortBy))
         {
-            throw AppException.BadRequest("Truong sap xep khong hop le.", "sortBy", $"Chi ho tro: {string.Join(", ", AllowedSortFields)}.");
+            throw AppException.BadRequest("Trường sắp xếp không hợp lệ.", "sortBy", "Vui lòng chọn trường sắp xếp hợp lệ.");
         }
 
         if (!string.Equals(request.SortDirection, "asc", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(request.SortDirection, "desc", StringComparison.OrdinalIgnoreCase))
         {
-            throw AppException.BadRequest("Chieu sap xep khong hop le.", "sortDirection", "Chi chap nhan 'asc' hoac 'desc'.");
+            throw AppException.BadRequest("Chiều sắp xếp không hợp lệ.", "sortDirection", "Vui lòng chọn chiều sắp xếp hợp lệ.");
         }
 
         if (request.FromDate.HasValue && request.ToDate.HasValue && request.FromDate.Value.Date > request.ToDate.Value.Date)
         {
-            throw AppException.BadRequest("Tu ngay khong duoc lon hon den ngay.", "fromDate", "Khoang thoi gian khong hop le.");
+            throw AppException.BadRequest("Từ ngày không được lớn hơn đến ngày.", "fromDate", "Khoảng thời gian không hợp lệ.");
         }
 
         return await queryRepository.SearchAsync(request, cancellationToken);
@@ -35,5 +35,5 @@ public sealed class AuditLogService(IAuditLogQueryRepository queryRepository) : 
 
     public async Task<AuditLogResponse> GetByIdAsync(long id, CancellationToken cancellationToken)
         => await queryRepository.GetByIdAsync(id, cancellationToken)
-           ?? throw AppException.NotFound($"Khong tim thay audit log co Id = {id}.");
+           ?? throw AppException.NotFound($"Không tìm thấy nhật ký hoạt động có Id = {id}.");
 }

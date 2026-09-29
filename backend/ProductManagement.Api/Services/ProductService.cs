@@ -22,7 +22,7 @@ public sealed class ProductService(
 {
     private static readonly HashSet<string> AllowedSortFields = new(StringComparer.OrdinalIgnoreCase)
     {
-        "productCode", "productName", "categoryName", "price", "quantity", "createdAt"
+        "productCode", "productName", "categoryName", "price", "stockQuantity", "createdAt"
     };
 
     public async Task<PagedResult<ProductResponse>> SearchAsync(ProductSearchRequest request, CancellationToken cancellationToken)
@@ -31,17 +31,23 @@ public sealed class ProductService(
         return await queryRepository.SearchAsync(request, cancellationToken);
     }
 
+    public async Task<PagedResult<ProductResponse>> SearchTrashAsync(ProductSearchRequest request, CancellationToken cancellationToken)
+    {
+        EnsureAdmin("Ban khong co quyen xem danh sach hang hoa da xoa.");
+        ValidateSearchRequest(request);
+        return await queryRepository.SearchTrashAsync(request, cancellationToken);
+    }
+
     public async Task<ProductResponse> GetByIdAsync(int id, CancellationToken cancellationToken)
         => await queryRepository.GetByIdAsync(id, cancellationToken)
            ?? throw AppException.NotFound($"Khong tim thay hang hoa co Id = {id}.");
 
     public async Task<ProductResponse> CreateAsync(ProductCreateRequest request, CancellationToken cancellationToken)
     {
-        var productName = NormalizeRequiredText(request.ProductName, "productName", "Ten hang hoa");
+        var productName = NormalizeRequiredProductName(request.ProductName);
         var unit = NormalizeRequiredText(request.Unit, "unit", "Don vi tinh");
         var description = NormalizeOptionalText(request.Description);
         var price = ValidateAmount(request.Price, "price", "Gia ban");
-        var quantity = ValidateAmount(request.Quantity, "quantity", "So luong");
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         var category = await dbContext.Categories
@@ -50,9 +56,7 @@ public sealed class ProductService(
             ?? throw AppException.BadRequest("Danh muc duoc chon khong ton tai.", "categoryId", "Danh muc khong ton tai.");
 
         if (!category.IsActive)
-        {
             throw AppException.BadRequest("Khong the gan hang hoa vao danh muc dang ngung hoat dong.", "categoryId", "Danh muc dang ngung hoat dong.");
-        }
 
         var productCode = $"{category.CodePrefix}{category.NextProductNumber:000000}";
         category.NextProductNumber++;
@@ -64,12 +68,11 @@ public sealed class ProductService(
             CategoryId = category.Id,
             Unit = unit,
             Price = price,
-            Quantity = quantity,
+            StockQuantity = 0m,
             Description = description,
             IsActive = request.IsActive,
             CreatedByUserId = currentUser.UserId,
-            CreatedByUsername = currentUser.Username,
-            CreatedByRole = NormalizeRole(currentUser.Role),
+            IsAdminProtected = RecordAccessPolicy.ShouldProtectAfterAction(currentUser.Role, false),
             CreatedAt = DateTime.UtcNow
         };
 
@@ -83,7 +86,7 @@ public sealed class ProductService(
             null,
             ProductSnapshot(entity, category.CategoryCode, category.CategoryName),
             null,
-            $"Created product {entity.ProductCode}.",
+            $"Da tao hang hoa {entity.ProductCode}.",
             cancellationToken);
         await commandRepository.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -99,26 +102,22 @@ public sealed class ProductService(
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw AppException.NotFound($"Khong tim thay hang hoa co Id = {id}.");
 
-        RecordAccessPolicy.EnsureCanModify(
-            currentUser.Role, entity.CreatedByRole, entity.LastModifiedByRole, "Hang hoa");
+        EnsureCanModifyProduct(entity, "Ban khong co quyen chinh sua hang hoa nay.");
 
-        var productName = NormalizeRequiredText(request.ProductName, "productName", "Ten hang hoa");
+        var productName = NormalizeRequiredProductName(request.ProductName);
         var unit = NormalizeRequiredText(request.Unit, "unit", "Don vi tinh");
         var description = NormalizeOptionalText(request.Description);
         var price = ValidateAmount(request.Price, "price", "Gia ban");
-        var quantity = ValidateAmount(request.Quantity, "quantity", "So luong");
         var category = await categoryQueryRepository.GetOptionByIdAsync(entity.CategoryId, cancellationToken);
         var oldSnapshot = ProductSnapshot(entity, category?.CategoryCode, category?.CategoryName);
 
         entity.ProductName = productName;
         entity.Unit = unit;
         entity.Price = price;
-        entity.Quantity = quantity;
         entity.Description = description;
         entity.IsActive = request.IsActive!.Value;
         entity.LastModifiedByUserId = currentUser.UserId;
-        entity.LastModifiedByUsername = currentUser.Username;
-        entity.LastModifiedByRole = NormalizeRole(currentUser.Role);
+        entity.IsAdminProtected = RecordAccessPolicy.ShouldProtectAfterAction(currentUser.Role, entity.IsAdminProtected);
         entity.UpdatedAt = DateTime.UtcNow;
 
         await commandRepository.SaveChangesAsync(cancellationToken);
@@ -132,7 +131,7 @@ public sealed class ProductService(
             oldSnapshot,
             newSnapshot,
             changedFields,
-            $"Updated product {entity.ProductCode}.",
+            $"Da cap nhat hang hoa {entity.ProductCode}.",
             cancellationToken);
         await commandRepository.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -148,12 +147,19 @@ public sealed class ProductService(
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw AppException.NotFound($"Khong tim thay hang hoa co Id = {id}.");
 
-        RecordAccessPolicy.EnsureCanModify(
-            currentUser.Role, entity.CreatedByRole, entity.LastModifiedByRole, "Hang hoa");
+        EnsureCanModifyProduct(entity, "Ban khong co quyen xoa hang hoa nay.");
+
+        if (entity.StockQuantity > 0)
+            throw AppException.Conflict("Khong the xoa hang hoa khi van con ton kho. Vui long xu ly ton kho truoc.");
 
         var category = await categoryQueryRepository.GetOptionByIdAsync(entity.CategoryId, cancellationToken);
         var oldSnapshot = ProductSnapshot(entity, category?.CategoryCode, category?.CategoryName);
-        commandRepository.Remove(entity);
+        var now = DateTime.UtcNow;
+        entity.IsDeleted = true;
+        entity.DeletedAt = now;
+        entity.DeletedByUserId = currentUser.UserId;
+        entity.UpdatedAt = now;
+
         await commandRepository.SaveChangesAsync(cancellationToken);
         await auditService.AddAsync(
             "DELETE",
@@ -163,16 +169,89 @@ public sealed class ProductService(
             oldSnapshot,
             null,
             null,
-            $"Deleted product {entity.ProductCode}.",
+            $"Da xoa hang hoa {entity.ProductCode}.",
             cancellationToken);
+        await commandRepository.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task<ProductResponse> RestoreAsync(int id, CancellationToken cancellationToken)
+    {
+        EnsureAdmin("Ban khong co quyen khoi phuc hang hoa nay.");
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        var entity = await dbContext.Products
+            .FromSqlInterpolated($"SELECT * FROM dbo.Products WITH (UPDLOCK, ROWLOCK) WHERE Id = {id}")
+            .IgnoreQueryFilters()
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw AppException.NotFound($"Khong tim thay hang hoa co Id = {id}.");
+
+        if (!entity.IsDeleted)
+            throw AppException.Conflict("Hang hoa nay chua bi xoa nen khong can khoi phuc.");
+
+        var category = await categoryQueryRepository.GetOptionByIdAsync(entity.CategoryId, cancellationToken);
+        var oldSnapshot = ProductSnapshot(entity, category?.CategoryCode, category?.CategoryName);
+        entity.IsDeleted = false;
+        entity.DeletedAt = null;
+        entity.DeletedByUserId = null;
+        entity.UpdatedAt = DateTime.UtcNow;
+
+        await commandRepository.SaveChangesAsync(cancellationToken);
+        var newSnapshot = ProductSnapshot(entity, category?.CategoryCode, category?.CategoryName);
+        await auditService.AddAsync(
+            "RESTORE",
+            "PRODUCT",
+            entity.Id.ToString(),
+            entity.ProductCode,
+            oldSnapshot,
+            newSnapshot,
+            null,
+            $"Da khoi phuc hang hoa {entity.ProductCode}.",
+            cancellationToken);
+        await commandRepository.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return await GetByIdAsync(id, cancellationToken);
+    }
+
+    public async Task DeletePermanentAsync(int id, CancellationToken cancellationToken)
+    {
+        EnsureAdmin("Ban khong co quyen xoa vinh vien hang hoa nay.");
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        var entity = await dbContext.Products
+            .FromSqlInterpolated($"SELECT * FROM dbo.Products WITH (UPDLOCK, ROWLOCK) WHERE Id = {id}")
+            .IgnoreQueryFilters()
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw AppException.NotFound($"Khong tim thay hang hoa co Id = {id}.");
+
+        if (!entity.IsDeleted)
+            throw AppException.Conflict("Chi co the xoa vinh vien hang hoa da nam trong danh sach da xoa.");
+
+        var category = await categoryQueryRepository.GetOptionByIdAsync(entity.CategoryId, cancellationToken);
+        var oldSnapshot = ProductSnapshot(entity, category?.CategoryCode, category?.CategoryName);
+        await auditService.AddAsync(
+            "PERMANENT_DELETE",
+            "PRODUCT",
+            entity.Id.ToString(),
+            entity.ProductCode,
+            oldSnapshot,
+            null,
+            null,
+            $"Da xoa vinh vien hang hoa {entity.ProductCode}.",
+            cancellationToken);
+        commandRepository.Remove(entity);
         await commandRepository.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task<PagedResult<AuditLogResponse>> GetHistoryAsync(int id, int page, int pageSize, CancellationToken cancellationToken)
     {
-        _ = await queryRepository.GetByIdAsync(id, cancellationToken)
-            ?? throw AppException.NotFound($"Khong tim thay hang hoa co Id = {id}.");
+        var product = await queryRepository.GetByIdAsync(id, cancellationToken);
+        var exists = product is not null
+                     || await dbContext.Products.IgnoreQueryFilters().AnyAsync(x => x.Id == id, cancellationToken);
+        if (!exists)
+            throw AppException.NotFound($"Khong tim thay hang hoa co Id = {id}.");
 
         return await auditLogQueryRepository.SearchAsync(new AuditLogSearchRequest
         {
@@ -185,26 +264,35 @@ public sealed class ProductService(
         }, cancellationToken);
     }
 
-    private static string NormalizeRole(string? role)
-        => string.IsNullOrWhiteSpace(role) ? string.Empty : role.Trim().ToUpperInvariant();
+    private void EnsureAdmin(string message)
+    {
+        if (!string.Equals(currentUser.Role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase))
+            throw AppException.Forbidden(message);
+    }
+
+    private void EnsureCanModifyProduct(Product entity, string message)
+    {
+        if (!RecordAccessPolicy.CanModify(currentUser.Role, entity.IsAdminProtected))
+            throw AppException.Forbidden(message);
+    }
 
     private static void ValidateSearchRequest(ProductSearchRequest request)
     {
         if (!Enum.IsDefined(request.StockStatus))
-            throw AppException.BadRequest("Trang thai ton kho khong hop le.", "stockStatus", "Chi chap nhan All, InStock hoac OutOfStock.");
+            throw AppException.BadRequest("Trang thai ton kho khong hop le.", "stockStatus", "Vui long chon trang thai ton kho hop le.");
 
         if (request.MinPrice.HasValue && request.MaxPrice.HasValue && request.MinPrice > request.MaxPrice)
             throw AppException.BadRequest("Gia tu khong duoc lon hon gia den.", "minPrice", "Gia tu phai nho hon hoac bang gia den.");
 
         if (!AllowedSortFields.Contains(request.SortBy))
-            throw AppException.BadRequest("Truong sap xep khong hop le.", "sortBy", $"Chi ho tro: {string.Join(", ", AllowedSortFields)}.");
+            throw AppException.BadRequest("Truong sap xep khong hop le.", "sortBy", "Vui long chon truong sap xep hop le.");
 
         if (!string.Equals(request.SortDirection, "asc", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(request.SortDirection, "desc", StringComparison.OrdinalIgnoreCase))
-            throw AppException.BadRequest("Chieu sap xep khong hop le.", "sortDirection", "Chi chap nhan 'asc' hoac 'desc'.");
+            throw AppException.BadRequest("Chieu sap xep khong hop le.", "sortDirection", "Vui long chon chieu sap xep hop le.");
     }
 
-    private static decimal ValidateAmount(decimal? value, string field, string label)
+    internal static decimal ValidateAmount(decimal? value, string field, string label)
     {
         const decimal maxDecimal18_2 = 9_999_999_999_999_999.99m;
 
@@ -228,10 +316,21 @@ public sealed class ProductService(
         return normalized;
     }
 
+    private static string NormalizeRequiredProductName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw AppException.BadRequest("Ten hang hoa la bat buoc.", "productName", "Khong duoc de trong.");
+
+        var normalized = TextNormalization.NormalizeNfc(value);
+        if (string.IsNullOrWhiteSpace(normalized))
+            throw AppException.BadRequest("Ten hang hoa la bat buoc.", "productName", "Khong duoc de trong.");
+        return normalized;
+    }
+
     private static string? NormalizeOptionalText(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static ProductAuditSnapshot ProductSnapshot(Product entity, string? categoryCode, string? categoryName)
+    internal static ProductAuditSnapshot ProductSnapshot(Product entity, string? categoryCode, string? categoryName)
         => new(
             entity.Id,
             entity.ProductCode,
@@ -241,7 +340,7 @@ public sealed class ProductService(
             categoryName,
             entity.Unit,
             entity.Price,
-            entity.Quantity,
+            entity.StockQuantity,
             entity.Description,
             entity.IsActive);
 
@@ -251,13 +350,13 @@ public sealed class ProductService(
         if (oldValue.ProductName != newValue.ProductName) fields.Add(nameof(Product.ProductName));
         if (oldValue.Unit != newValue.Unit) fields.Add(nameof(Product.Unit));
         if (oldValue.Price != newValue.Price) fields.Add(nameof(Product.Price));
-        if (oldValue.Quantity != newValue.Quantity) fields.Add(nameof(Product.Quantity));
+        if (oldValue.StockQuantity != newValue.StockQuantity) fields.Add(nameof(Product.StockQuantity));
         if (oldValue.Description != newValue.Description) fields.Add(nameof(Product.Description));
         if (oldValue.IsActive != newValue.IsActive) fields.Add(nameof(Product.IsActive));
         return fields;
     }
 
-    private sealed record ProductAuditSnapshot(
+    internal sealed record ProductAuditSnapshot(
         int Id,
         string ProductCode,
         string ProductName,
@@ -266,7 +365,7 @@ public sealed class ProductService(
         string? CategoryName,
         string Unit,
         decimal Price,
-        decimal Quantity,
+        decimal StockQuantity,
         string? Description,
         bool IsActive);
 }

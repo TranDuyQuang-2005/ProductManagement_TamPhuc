@@ -31,12 +31,6 @@ public sealed class AdminUserSeeder(
         var user = await userManager.FindByNameAsync(username);
         if (user is not null)
         {
-            if (!string.Equals(user.Role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase))
-            {
-                user.Role = AppRoles.Admin;
-                await userManager.UpdateAsync(user);
-            }
-
             if (!await userManager.IsInRoleAsync(user, AppRoles.Admin))
                 await userManager.AddToRoleAsync(user, AppRoles.Admin);
             return;
@@ -47,7 +41,6 @@ public sealed class AdminUserSeeder(
             UserName = username,
             Email = string.IsNullOrWhiteSpace(seed.Email) ? null : seed.Email.Trim(),
             FullName = string.IsNullOrWhiteSpace(seed.FullName) ? "Administrator" : seed.FullName.Trim(),
-            Role = AppRoles.Admin,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };

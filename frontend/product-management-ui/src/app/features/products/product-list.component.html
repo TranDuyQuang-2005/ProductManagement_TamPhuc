@@ -3,7 +3,10 @@
     <h1>Quản lý hàng hóa</h1>
     <p>Tìm kiếm, lọc và quản lý dữ liệu hàng hóa.</p>
   </div>
-  <a class="btn primary" routerLink="/products/new">+ Thêm hàng hóa</a>
+  <div class="header-actions">
+    <button data-testid="open-trash" *ngIf="authService.isAdmin" class="btn" type="button" (click)="openTrash()">Hàng hóa đã xóa</button>
+    <a data-testid="add-product" class="btn primary" routerLink="/products/new">+ Thêm hàng hóa</a>
+  </div>
 </section>
 
 <div *ngIf="message" class="alert success">{{ message }}</div>
@@ -15,7 +18,7 @@
 <form class="card filters" [formGroup]="filterForm" (ngSubmit)="search()">
   <div class="field grow">
     <label>Từ khóa</label>
-    <input formControlName="keyword" placeholder="Ví dụ: DU000001 hoặc thịt bò">
+    <input data-testid="product-search-keyword" formControlName="keyword" placeholder="Ví dụ: DU000001 hoặc thịt bò">
   </div>
   <div class="field">
     <label>Danh mục</label>
@@ -58,7 +61,7 @@
       <option value="productName">Tên hàng</option>
       <option value="categoryName">Danh mục</option>
       <option value="price">Giá</option>
-      <option value="quantity">Số lượng</option>
+      <option value="stockQuantity">Tồn kho</option>
     </select>
   </div>
   <div class="field">
@@ -70,7 +73,7 @@
   </div>
   <div class="filter-actions">
     <button type="button" class="btn" (click)="reset()">Đặt lại</button>
-    <button type="submit" class="btn primary">Tìm kiếm</button>
+    <button data-testid="product-search-submit" type="submit" class="btn primary">Tìm kiếm</button>
   </div>
 </form>
 
@@ -84,13 +87,13 @@
       </tr>
     </thead>
     <tbody>
-      <tr *ngFor="let product of products">
+      <tr *ngFor="let product of products" [attr.data-testid]="'product-row-' + product.productCode">
         <td><strong>{{ product.productCode }}</strong></td>
         <td>{{ product.productName }}</td>
         <td>{{ product.categoryName }}</td>
         <td>{{ product.unit }}</td>
         <td class="number">{{ product.price | number:'1.0-2' }} VND</td>
-        <td class="number">{{ product.quantity | number:'1.0-2' }}</td>
+        <td class="number">{{ product.stockQuantity | number:'1.0-2' }}</td>
         <td>
           <span class="badge status-badge" [class.good]="product.isActive" [class.warning]="!product.isActive">
             {{ product.isActive ? 'Hoạt động' : 'Ngừng hoạt động' }}
@@ -98,7 +101,7 @@
         </td>
         <td class="actions table-actions">
           <ng-container *ngIf="canEditProduct(product); else lockedEdit">
-            <a class="btn small action-btn" [routerLink]="['/products', product.id, 'edit']">Sửa</a>
+            <a class="btn small action-btn" [attr.data-testid]="'edit-product-' + product.productCode" [routerLink]="['/products', product.id, 'edit']">Sửa</a>
           </ng-container>
           <ng-template #lockedEdit>
             <span class="action-tooltip" [title]="editTitle(product)">
@@ -108,12 +111,14 @@
               </button>
             </span>
           </ng-template>
-          <button class="btn small action-btn" type="button" (click)="openHistory(product)">Lịch sử</button>
+          <button class="btn small action-btn" type="button" [attr.data-testid]="'stock-in-product-' + product.productCode" (click)="openStockIn(product)">Nhập hàng</button>
+          <button class="btn small action-btn" type="button" [attr.data-testid]="'history-product-' + product.productCode" (click)="openHistory(product)">Lịch sử</button>
           <span class="action-tooltip" [title]="deleteTitle(product)">
             <button
               class="btn small danger action-btn"
               type="button"
               [disabled]="!canDeleteProduct(product) || deletingId !== null"
+              [attr.data-testid]="'delete-product-' + product.productCode"
               (click)="deleteProduct(product)">
               <span *ngIf="!canDeleteProduct(product)" class="lock-icon" aria-hidden="true"></span>
               {{ deletingId === product.id ? 'Đang xóa...' : 'Xóa' }}
@@ -137,17 +142,141 @@
   </div>
 </div>
 
+<div class="modal-backdrop" *ngIf="stockInProduct" (click)="closeStockIn()">
+  <section class="card modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Nhập hàng</h2>
+      <button class="btn small" type="button" (click)="closeStockIn()">Đóng</button>
+    </div>
+
+    <form class="form-card" [formGroup]="stockInForm" (ngSubmit)="submitStockIn()">
+      <div class="form-grid">
+        <div class="field">
+          <label>Mã hàng</label>
+          <input [value]="stockInProduct.productCode" readonly>
+        </div>
+        <div class="field">
+          <label>Tên hàng</label>
+          <input [value]="stockInProduct.productName" readonly>
+        </div>
+        <div class="field">
+          <label>Đơn vị</label>
+          <input [value]="stockInProduct.unit" readonly>
+        </div>
+        <div class="field">
+          <label>Tồn kho hiện tại</label>
+          <input [value]="stockInProduct.stockQuantity | number:'1.2-2'" readonly>
+        </div>
+        <div class="field">
+          <label>Số lượng nhập *</label>
+          <input data-testid="stock-in-quantity" type="number" min="0.01" max="90000000000000" step="0.01" formControlName="quantity" placeholder="0">
+          <small class="field-error" *ngIf="stockInFieldError('quantity')">{{ stockInFieldError('quantity') }}</small>
+        </div>
+        <div class="field">
+          <label>Mã chứng từ / tham chiếu</label>
+          <input data-testid="stock-in-reference" maxlength="50" formControlName="referenceCode">
+          <small class="field-error" *ngIf="stockInFieldError('referenceCode')">{{ stockInFieldError('referenceCode') }}</small>
+        </div>
+        <div class="field full">
+          <label>Ghi chú</label>
+          <textarea data-testid="stock-in-note" rows="3" maxlength="500" formControlName="note"></textarea>
+          <small class="field-error" *ngIf="stockInFieldError('note')">{{ stockInFieldError('note') }}</small>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn" type="button" (click)="closeStockIn()">Hủy</button>
+        <button data-testid="stock-in-submit" class="btn primary" type="submit" [disabled]="stockInSaving">
+          {{ stockInSaving ? 'Đang nhập hàng...' : 'Xác nhận nhập hàng' }}
+        </button>
+      </div>
+    </form>
+  </section>
+</div>
+
 <app-confirm-dialog
   [open]="pendingDeleteProduct !== null"
   title="Xác nhận xóa"
-  message="Bạn có chắc chắn muốn xóa hàng hóa"
+  message="Bạn có chắc muốn xóa hàng hóa"
   [target]="pendingDeleteProduct ? '&quot;' + pendingDeleteProduct.productName + '&quot; (' + pendingDeleteProduct.productCode + ')?' : ''"
-  warning="Thao tác này không thể hoàn tác."
-  confirmLabel="Xóa hàng hóa"
+  warning="Hàng hóa sẽ được chuyển vào danh sách đã xóa và có thể khôi phục."
+  confirmLabel="Xóa"
   loadingLabel="Đang xóa..."
   [loading]="deletingId !== null"
   (cancel)="cancelDeleteProduct()"
   (confirm)="confirmDeleteProduct()" />
+
+<div class="modal-backdrop" *ngIf="trashOpen" (click)="closeTrash()">
+  <section class="card modal trash-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Hàng hóa đã xóa</h2>
+      <button class="btn small" type="button" (click)="closeTrash()">Đóng</button>
+    </div>
+
+    <div *ngIf="trashLoading" class="loading">Đang tải danh sách hàng hóa đã xóa...</div>
+    <div *ngIf="!trashLoading && trashProducts.length === 0" class="empty">Chưa có hàng hóa đã xóa phù hợp với điều kiện tìm kiếm.</div>
+
+    <div class="table-wrap nested-table" *ngIf="!trashLoading && trashProducts.length > 0">
+      <table>
+        <thead>
+          <tr>
+            <th>Mã hàng</th><th>Tên hàng</th><th>Danh mục</th><th>ĐVT</th>
+            <th class="number">Giá</th><th>Đã xóa lúc</th><th>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let product of trashProducts" [attr.data-testid]="'trash-row-' + product.productCode">
+            <td><strong>{{ product.productCode }}</strong></td>
+            <td>{{ product.productName }}</td>
+            <td>{{ product.categoryName }}</td>
+            <td>{{ product.unit }}</td>
+            <td class="number">{{ product.price | number:'1.0-2' }} VND</td>
+            <td>{{ product.deletedAt ? (product.deletedAt | date:'dd/MM/yyyy HH:mm') : '—' }}</td>
+            <td class="actions table-actions">
+              <button
+                class="btn small action-btn"
+                type="button"
+                [disabled]="restoringId !== null || permanentDeletingId !== null"
+                [attr.data-testid]="'restore-product-' + product.productCode"
+                (click)="restoreProduct(product)">
+                {{ restoringId === product.id ? 'Đang khôi phục...' : 'Khôi phục' }}
+              </button>
+              <button
+                class="btn small danger action-btn wide"
+                type="button"
+                [disabled]="restoringId !== null || permanentDeletingId !== null"
+                [attr.data-testid]="'permanent-delete-product-' + product.productCode"
+                (click)="deletePermanentProduct(product)">
+                {{ permanentDeletingId === product.id ? 'Đang xóa...' : 'Xóa vĩnh viễn' }}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pagination" *ngIf="!trashLoading">
+      <span>Tổng: <strong>{{ trashTotalItems }}</strong> bản ghi</span>
+      <div>
+        <button class="btn small" [disabled]="trashPage <= 1" (click)="previousTrashPage()">Trước</button>
+        <span>Trang {{ trashPage }} / {{ trashTotalPages || 1 }}</span>
+        <button class="btn small" [disabled]="trashPage >= trashTotalPages || trashTotalPages === 0" (click)="nextTrashPage()">Sau</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<app-confirm-dialog
+  [open]="pendingPermanentDeleteProduct !== null"
+  title="Xác nhận xóa vĩnh viễn"
+  message="Bạn có chắc muốn xóa vĩnh viễn hàng hóa này?"
+  [target]="pendingPermanentDeleteProduct ? '&quot;' + pendingPermanentDeleteProduct.productName + '&quot; (' + pendingPermanentDeleteProduct.productCode + ')' : ''"
+  warning="Thao tác này không thể hoàn tác."
+  confirmLabel="Xóa vĩnh viễn"
+  loadingLabel="Đang xóa..."
+  [loading]="permanentDeletingId !== null"
+  (cancel)="cancelPermanentDeleteProduct()"
+  (confirm)="confirmPermanentDeleteProduct()" />
 
 <div class="modal-backdrop" *ngIf="historyProduct" (click)="closeHistory()">
   <section class="card modal" (click)="$event.stopPropagation()">
@@ -158,7 +287,7 @@
     <div *ngIf="historyLoading" class="loading">Đang tải lịch sử hàng hóa...</div>
     <div *ngIf="!historyLoading && historyLogs.length === 0" class="empty">Chưa có lịch sử.</div>
     <div class="history-list" *ngIf="!historyLoading">
-      <article class="history-item" *ngFor="let log of historyLogs">
+      <article class="history-item" *ngFor="let log of historyLogs" [attr.data-testid]="'history-row-' + log.action + '-' + log.entityCode">
         <div class="history-meta">
           <strong>{{ log.createdAt | date:'dd/MM/yyyy HH:mm' }}</strong>
           <span>{{ log.username }}</span>

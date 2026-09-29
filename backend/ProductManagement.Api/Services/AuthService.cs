@@ -27,40 +27,44 @@ public sealed class AuthService(
 
         if (user is null || !user.IsActive)
         {
-            await auditService.AddAuthAsync("LOGIN_FAILED", user, username, "Invalid username or inactive account.", cancellationToken);
+            await auditService.AddAuthAsync("LOGIN_FAILED", user, username, "Dang nhap that bai.", cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
-            throw AppException.BadRequest("Ten dang nhap hoac mat khau khong dung.", "username", "Thong tin dang nhap khong hop le.");
+            throw AppException.BadRequest("Ten dang nhap hoac mat khau khong chinh xac.", "username", "Thong tin dang nhap khong hop le.");
         }
 
         if (!await userManager.CheckPasswordAsync(user, request.Password))
         {
-            await auditService.AddAuthAsync("LOGIN_FAILED", user, username, "Invalid password.", cancellationToken);
+            await auditService.AddAuthAsync("LOGIN_FAILED", user, username, "Dang nhap that bai.", cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
-            throw AppException.BadRequest("Ten dang nhap hoac mat khau khong dung.", "password", "Thong tin dang nhap khong hop le.");
+            throw AppException.BadRequest("Ten dang nhap hoac mat khau khong chinh xac.", "password", "Thong tin dang nhap khong hop le.");
         }
 
-        var normalizedRole = NormalizeRole(user.Role);
-        if (normalizedRole is null)
+        var role = await GetPrimaryRoleAsync(user);
+        if (role is null)
         {
-            await auditService.AddAuthAsync("LOGIN_FAILED", user, username, "Account role is invalid.", cancellationToken);
+            await auditService.AddAuthAsync("LOGIN_FAILED", user, username, "Vai tro tai khoan khong hop le.", cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
-            throw AppException.Forbidden("Tai khoan chua duoc gan vai tro ADMIN hoac STAFF hop le.");
+            throw AppException.Forbidden("Tai khoan chua duoc gan vai tro hop le.");
         }
 
         var now = DateTime.UtcNow;
-        user.Role = normalizedRole;
         user.LastLoginAt = now;
         await userManager.UpdateAsync(user);
-        await auditService.AddAuthAsync("LOGIN", user, username, "Login successful.", cancellationToken);
+        await auditService.AddAuthAsync("LOGIN", user, username, "Dang nhap he thong.", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var expiresAt = now.AddMinutes(jwtOptions.Value.ExpirationMinutes);
-        var accessToken = CreateToken(user, expiresAt);
+        var accessToken = CreateToken(user, role, expiresAt);
         return new LoginResponse(
             accessToken,
             expiresAt,
-            new AuthUserResponse(user.Id, user.UserName ?? username, user.FullName, user.Role));
+            new AuthUserResponse(user.Id, user.UserName ?? username, user.FullName, role));
     }
+
+    private async Task<string?> GetPrimaryRoleAsync(ApplicationUser user)
+        => (await userManager.GetRolesAsync(user))
+            .Select(NormalizeRole)
+            .FirstOrDefault(x => x is not null);
 
     private static string? NormalizeRole(string? role)
     {
@@ -69,7 +73,7 @@ public sealed class AuthService(
         return normalized is AppRoles.Admin or AppRoles.Staff ? normalized : null;
     }
 
-    private string CreateToken(ApplicationUser user, DateTime expiresAt)
+    private string CreateToken(ApplicationUser user, string role, DateTime expiresAt)
     {
         var settings = jwtOptions.Value;
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(settings.Secret));
@@ -81,8 +85,8 @@ public sealed class AuthService(
             new("userId", user.Id),
             new("username", user.UserName ?? string.Empty),
             new("fullName", user.FullName),
-            new(ClaimTypes.Role, user.Role),
-            new("role", user.Role)
+            new(ClaimTypes.Role, role),
+            new("role", role)
         };
 
         var token = new JwtSecurityToken(

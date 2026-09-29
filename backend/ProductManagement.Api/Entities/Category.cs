@@ -10,11 +10,8 @@ public sealed class Category
     public string? Description { get; set; }
     public bool IsActive { get; set; } = true;
     public string? CreatedByUserId { get; set; }
-    public string? CreatedByUsername { get; set; }
-    public string? CreatedByRole { get; set; }
     public string? LastModifiedByUserId { get; set; }
-    public string? LastModifiedByUsername { get; set; }
-    public string? LastModifiedByRole { get; set; }
+    public bool IsAdminProtected { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 

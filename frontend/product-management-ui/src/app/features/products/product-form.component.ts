@@ -52,7 +52,6 @@ export class ProductFormComponent implements OnInit {
     categoryId: this.fb.control<number | null>(null, [Validators.required, Validators.min(1)]),
     unit: this.fb.control('', [Validators.required, Validators.maxLength(50), notBlank]),
     price: this.fb.control<number | null>(null, [Validators.required, Validators.min(0), Validators.max(UI_MAX_AMOUNT), maxTwoDecimals]),
-    quantity: this.fb.control<number | null>(null, [Validators.required, Validators.min(0), Validators.max(UI_MAX_AMOUNT), maxTwoDecimals]),
     description: this.fb.control('', [Validators.maxLength(1000)]),
     isActive: this.fb.control(true, { nonNullable: true })
   });
@@ -113,7 +112,6 @@ export class ProductFormComponent implements OnInit {
       categoryId: value.categoryId!,
       unit: value.unit!.trim(),
       price: value.price!,
-      quantity: value.quantity!,
       description: value.description?.trim() || null,
       isActive: value.isActive
     };
@@ -121,7 +119,6 @@ export class ProductFormComponent implements OnInit {
       productName: value.productName!.trim(),
       unit: value.unit!.trim(),
       price: value.price!,
-      quantity: value.quantity!,
       description: value.description?.trim() || null,
       isActive: value.isActive
     };
@@ -163,7 +160,6 @@ export class ProductFormComponent implements OnInit {
     if (field === 'categoryId' && control.errors['required']) return 'Vui lòng chọn danh mục.';
     if (field === 'unit' && (control.errors['required'] || control.errors['blank'])) return 'Đơn vị tính không được để trống.';
     if (field === 'price' && control.errors['min']) return 'Giá bán không được nhỏ hơn 0.';
-    if (field === 'quantity' && control.errors['min']) return 'Số lượng không được nhỏ hơn 0.';
     if (control.errors['required'] || control.errors['blank']) return 'Trường này là bắt buộc.';
     if (control.errors['maxlength']) return `Tối đa ${control.errors['maxlength'].requiredLength} ký tự.`;
     if (control.errors['max']) return 'Giá trị quá lớn.';
@@ -197,7 +193,6 @@ export class ProductFormComponent implements OnInit {
           categoryId: product.data.categoryId,
           unit: product.data.unit,
           price: product.data.price,
-          quantity: product.data.quantity,
           description: product.data.description ?? '',
           isActive: product.data.isActive
         });

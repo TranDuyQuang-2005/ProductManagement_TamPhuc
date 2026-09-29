@@ -28,12 +28,6 @@ public sealed class StaffUserSeeder(
         var user = await userManager.FindByNameAsync(username);
         if (user is not null)
         {
-            if (!string.Equals(user.Role, AppRoles.Staff, StringComparison.OrdinalIgnoreCase))
-            {
-                user.Role = AppRoles.Staff;
-                await userManager.UpdateAsync(user);
-            }
-
             if (!await userManager.IsInRoleAsync(user, AppRoles.Staff))
                 await userManager.AddToRoleAsync(user, AppRoles.Staff);
             return;
@@ -44,7 +38,6 @@ public sealed class StaffUserSeeder(
             UserName = username,
             Email = string.IsNullOrWhiteSpace(seed.Email) ? null : seed.Email.Trim(),
             FullName = string.IsNullOrWhiteSpace(seed.FullName) ? "Staff User" : seed.FullName.Trim(),
-            Role = AppRoles.Staff,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
